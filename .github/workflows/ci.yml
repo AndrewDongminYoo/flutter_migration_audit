@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --locked
+
+      # The corpus is rebuilt from pinned commits and release tags, so the
+      # committed manifests must come out unchanged.
+      - name: Build corpus
+        run: |
+          uv run --python 3.12 scripts/fetch_snapshots.py
+          uv run --python 3.12 scripts/fetch_api_docs.py
+          git diff --exit-code -- data/manifest
+
+      # No embedding index in CI (a cold build takes about 15 minutes), so the
+      # embedding tests skip and the rest run against the real corpus.
+      - name: Test
+        run: uv run pytest -rs

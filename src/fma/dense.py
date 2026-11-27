@@ -37,18 +37,18 @@ def cache_path(chunks: list[Chunk], model: str = MODEL, cache_dir: Path = CACHE)
 class Dense:
     def __init__(self, chunks: list[Chunk], model: str = MODEL, cache_dir: Path = CACHE,
                  build: bool = True):
-        from fastembed import TextEmbedding
-
         self.chunks = chunks
         self.model_name = model
         self.path = cache_path(chunks, model, cache_dir)
-        self.model = TextEmbedding(model)
-        if self.path.exists():
-            self.matrix = np.load(self.path)
-        elif build:
-            self.matrix = self._build()
-        else:
+        # Check the index before loading the model: loading may download it,
+        # and a caller that only wants an existing index must not pay for that.
+        if not self.path.exists() and not build:
             raise FileNotFoundError(self.path)
+
+        from fastembed import TextEmbedding
+
+        self.model = TextEmbedding(model)
+        self.matrix = np.load(self.path) if self.path.exists() else self._build()
 
     def _build(self) -> np.ndarray:
         texts = [passage_text(c) for c in self.chunks]
