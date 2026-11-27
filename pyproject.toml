@@ -11,6 +11,9 @@ fma = "fma.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
+eval = [
+    "fastembed>=0.9.1",
+]
 
 [build-system]
 requires = ["uv_build>=0.8,<0.11"]

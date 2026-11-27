@@ -1,0 +1,1098 @@
+{
+  "target": "flutter-3.27",
+  "model": "BAAI/bge-small-en-v1.5",
+  "top_k": 10,
+  "summary": {
+    "bm25": {
+      "hit@1": 0.26666666666666666,
+      "hit@3": 0.4666666666666667,
+      "mrr@10": 0.38222222222222224,
+      "wrong_version@1": 0.06666666666666667
+    },
+    "embedding": {
+      "hit@1": 0.0,
+      "hit@3": 0.6,
+      "mrr@10": 0.29444444444444445,
+      "wrong_version@1": 0.3333333333333333
+    },
+    "bm25+version": {
+      "hit@1": 0.3333333333333333,
+      "hit@3": 0.5333333333333333,
+      "mrr@10": 0.48444444444444446,
+      "wrong_version@1": 0.06666666666666667
+    },
+    "embedding+version": {
+      "hit@1": 0.6,
+      "hit@3": 0.6666666666666666,
+      "mrr@10": 0.6305555555555556,
+      "wrong_version@1": 0.06666666666666667
+    }
+  },
+  "questions": [
+    {
+      "id": "q01",
+      "question": "After upgrading Flutter from 3.24 to 3.27, my Android app now draws behind the status bar. Why did this start happening?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
+      "gold_sections": [
+        "Context"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": null,
+          "top1": {
+            "doc_id": "flutter-3.27:api/material/AppBar.md",
+            "heading": "AppBar (class, material library)",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/material/AppBar.md › AppBar (class, material library)",
+            "flutter-3.24 api/material/AppBar.md › AppBar (class, material library)",
+            "latest api/material/AppBar.md › AppBar (class, material library)"
+          ]
+        },
+        "embedding": {
+          "rank": null,
+          "top1": {
+            "doc_id": "latest:release/breaking-changes/3-7-deprecations.md",
+            "heading": "`AppBar`, `SliverAppBar`, and `AppBarTheme` updates",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest release/breaking-changes/3-7-deprecations.md › `AppBar`, `SliverAppBar`, and `AppBarTheme` updates",
+            "flutter-3.24 release/breaking-changes/3-7-deprecations.md › `AppBar`, `SliverAppBar`, and `AppBarTheme` updates",
+            "flutter-3.27 release/breaking-changes/3-7-deprecations.md › `AppBar`, `SliverAppBar`, and `AppBarTheme` updates"
+          ]
+        },
+        "bm25+version": {
+          "rank": null,
+          "top1": {
+            "doc_id": "flutter-3.27:api/material/AppBar.md",
+            "heading": "AppBar (class, material library)",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/material/AppBar.md › AppBar (class, material library)",
+            "flutter-3.27 release/breaking-changes/android-surface-plugins.md › Timeline",
+            "flutter-3.27 api/widgets/SafeArea.md › SafeArea (class, widgets library)"
+          ]
+        },
+        "embedding+version": {
+          "rank": null,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/3-7-deprecations.md",
+            "heading": "`AppBar`, `SliverAppBar`, and `AppBarTheme` updates",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/3-7-deprecations.md › `AppBar`, `SliverAppBar`, and `AppBarTheme` updates",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.manual",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.leanBack"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q02",
+      "question": "Which Android SDK does a Flutter 3.27 app target by default?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
+      "gold_sections": [
+        "Timeline"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": 2,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline",
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline"
+          ]
+        },
+        "embedding": {
+          "rank": 6,
+          "top1": {
+            "doc_id": "latest:deployment/android.md",
+            "heading": "Android SDK versions",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest deployment/android.md › Android SDK versions",
+            "latest release/breaking-changes/default-abi-filters-android.md › Context",
+            "latest release/breaking-changes/default-abi-filters-android.md › "
+          ]
+        },
+        "bm25+version": {
+          "rank": 2,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.edgeToEdge"
+          ]
+        },
+        "embedding+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Timeline",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline",
+            "flutter-3.27 release/breaking-changes/android-kitkat-deprecation.md › Summary",
+            "flutter-3.27 deployment/android.md › What are the supported target architectures?"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q03",
+      "question": "I pinned targetSdk to 34 in build.gradle. Will upgrading to Flutter 3.27 still make my app edge-to-edge?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
+      "gold_sections": [
+        "Context"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline"
+          ]
+        },
+        "embedding": {
+          "rank": 3,
+          "top1": {
+            "doc_id": "flutter-3.24:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Timeline",
+            "snapshot": "flutter-3.24"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.24 release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline",
+            "flutter-3.24 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context"
+          ]
+        },
+        "bm25+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline",
+            "flutter-3.27 release/breaking-changes/index.md › Released in Flutter 3.27"
+          ]
+        },
+        "embedding+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Summary"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q04",
+      "question": "How do I keep the old non edge-to-edge layout on Android 15 after moving to Flutter 3.27?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
+      "gold_sections": [
+        "Migration guide"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": null,
+          "top1": {
+            "doc_id": "latest:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline"
+          ]
+        },
+        "embedding": {
+          "rank": 2,
+          "top1": {
+            "doc_id": "latest:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Android 15 (and below)",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Android 15 (and below)",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "flutter-3.24 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide"
+          ]
+        },
+        "bm25+version": {
+          "rank": 5,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Summary"
+          ]
+        },
+        "embedding+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Migration guide",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Summary"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q05",
+      "question": "Is the windowOptOutEdgeToEdgeEnforcement opt-out a permanent solution?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
+      "gold_sections": [
+        "Context"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": null,
+          "top1": {
+            "doc_id": "latest:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Migration guide",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "flutter-3.24 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide"
+          ]
+        },
+        "embedding": {
+          "rank": null,
+          "top1": {
+            "doc_id": "latest:release/breaking-changes/visibility-maintainfocusability.md",
+            "heading": "",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest release/breaking-changes/visibility-maintainfocusability.md › ",
+            "latest release/breaking-changes/window-singleton.md › ",
+            "latest release/breaking-changes/use-maxLengthEnforcement-instead-of-maxLengthEnforced.md › "
+          ]
+        },
+        "bm25+version": {
+          "rank": 5,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Migration guide",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "flutter-3.27 release/breaking-changes/material-3-migration.md › Migration guide",
+            "flutter-3.27 release/breaking-changes/material-3-default.md › Migration guide"
+          ]
+        },
+        "embedding+version": {
+          "rank": null,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/win-lifecycle-process-function.md",
+            "heading": "References",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/win-lifecycle-process-function.md › References",
+            "flutter-3.27 release/breaking-changes/use-maxLengthEnforcement-instead-of-maxLengthEnforced.md › Timeline",
+            "flutter-3.27 release/breaking-changes/use-maxLengthEnforcement-instead-of-maxLengthEnforced.md › References"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q06",
+      "question": "My app already calls SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge). Do I need to migrate anything for Flutter 3.27?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
+      "gold_sections": [
+        "Context"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode (enum, services library)"
+          ]
+        },
+        "embedding": {
+          "rank": 3,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Summary",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Summary",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › References",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context"
+          ]
+        },
+        "bm25+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode (enum, services library)",
+            "flutter-3.27 release/breaking-changes/3-7-deprecations.md › `SystemChrome.setEnabledSystemUIOverlays`"
+          ]
+        },
+        "embedding+version": {
+          "rank": 3,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Summary",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Summary",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › References",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q07",
+      "question": "My video player hides the system bars with SystemUiMode.immersiveSticky. Will that still work when the app targets Android 15?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "api/services/SystemUiMode.md",
+      "gold_sections": [
+        "SystemUiMode.immersiveSticky"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": 3,
+          "top1": {
+            "doc_id": "latest:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.immersiveSticky",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": true,
+          "top1_identical_text": false,
+          "top3": [
+            "latest api/services/SystemUiMode.md › SystemUiMode.immersiveSticky",
+            "latest api/services/SystemUiMode.md › SystemUiMode.immersive",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.immersiveSticky"
+          ]
+        },
+        "embedding": {
+          "rank": 2,
+          "top1": {
+            "doc_id": "flutter-3.24:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.immersiveSticky",
+            "snapshot": "flutter-3.24"
+          },
+          "top1_wrong_version": true,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.24 api/services/SystemUiMode.md › SystemUiMode.immersiveSticky",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.immersiveSticky",
+            "latest api/services/SystemUiMode.md › SystemUiMode.immersiveSticky"
+          ]
+        },
+        "bm25+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.immersiveSticky",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.immersiveSticky",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.immersive",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.edgeToEdge"
+          ]
+        },
+        "embedding+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.immersiveSticky",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.immersiveSticky",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.immersive",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.manual"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q08",
+      "question": "Does SystemUiMode.leanBack still work on Android 15 with Flutter 3.27?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "api/services/SystemUiMode.md",
+      "gold_sections": [
+        "SystemUiMode.leanBack"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": 2,
+          "top1": {
+            "doc_id": "latest:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.leanBack",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context"
+          ]
+        },
+        "embedding": {
+          "rank": 2,
+          "top1": {
+            "doc_id": "latest:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.leanBack",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": true,
+          "top1_identical_text": false,
+          "top3": [
+            "latest api/services/SystemUiMode.md › SystemUiMode.leanBack",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.leanBack",
+            "flutter-3.24 api/services/SystemUiMode.md › SystemUiMode.leanBack"
+          ]
+        },
+        "bm25+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.leanBack",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.leanBack",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.manual"
+          ]
+        },
+        "embedding+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.leanBack",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.leanBack",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.immersiveSticky"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q09",
+      "question": "What does SystemUiMode.edgeToEdge do on Android?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "api/services/SystemUiMode.md",
+      "gold_sections": [
+        "SystemUiMode.edgeToEdge"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.edgeToEdge",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.edgeToEdge",
+            "latest api/services/SystemUiMode.md › SystemUiMode.edgeToEdge",
+            "flutter-3.24 api/services/SystemChrome.md › SystemChrome.setSystemUIChangeCallback"
+          ]
+        },
+        "embedding": {
+          "rank": 2,
+          "top1": {
+            "doc_id": "latest:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.edgeToEdge",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": true,
+          "top1_identical_text": true,
+          "top3": [
+            "latest api/services/SystemUiMode.md › SystemUiMode.edgeToEdge",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.edgeToEdge",
+            "flutter-3.24 api/services/SystemUiMode.md › SystemUiMode.edgeToEdge"
+          ]
+        },
+        "bm25+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.edgeToEdge",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.edgeToEdge",
+            "flutter-3.27 api/services/SystemChrome.md › SystemChrome.setSystemUIChangeCallback",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode (enum, services library)"
+          ]
+        },
+        "embedding+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.edgeToEdge",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.edgeToEdge",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Summary",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › References"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q10",
+      "question": "How do I stop my app content from being covered by the Android status bar?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "ui/adaptive-responsive/safearea-mediaquery.md",
+      "gold_sections": [
+        "SafeArea"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": 5,
+          "top1": {
+            "doc_id": "flutter-3.24:release/breaking-changes/androidx-migration.md",
+            "heading": "How do I know if my project is using AndroidX?",
+            "snapshot": "flutter-3.24"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.24 release/breaking-changes/androidx-migration.md › How do I know if my project is using AndroidX?",
+            "flutter-3.27 release/breaking-changes/androidx-migration.md › How do I know if my project is using AndroidX?",
+            "latest release/breaking-changes/androidx-migration.md › How do I know if my project is using AndroidX?"
+          ]
+        },
+        "embedding": {
+          "rank": null,
+          "top1": {
+            "doc_id": "latest:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.manual",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest api/services/SystemUiMode.md › SystemUiMode.manual",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.manual",
+            "flutter-3.27 api/services/SystemUiOverlayStyle.md › SystemUiOverlayStyle.systemStatusBarContrastEnforced"
+          ]
+        },
+        "bm25+version": {
+          "rank": 2,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/androidx-migration.md",
+            "heading": "How do I know if my project is using AndroidX?",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/androidx-migration.md › How do I know if my project is using AndroidX?",
+            "flutter-3.27 ui/adaptive-responsive/safearea-mediaquery.md › SafeArea",
+            "flutter-3.27 deployment/android.md › How do I sign the app bundle created by `flutter build appbundle`?"
+          ]
+        },
+        "embedding+version": {
+          "rank": null,
+          "top1": {
+            "doc_id": "flutter-3.27:api/services/SystemUiMode.md",
+            "heading": "SystemUiMode.manual",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.manual",
+            "flutter-3.27 api/services/SystemUiOverlayStyle.md › SystemUiOverlayStyle.systemStatusBarContrastEnforced",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.edgeToEdge"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q11",
+      "question": "Where should I put SafeArea in a Scaffold?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "ui/adaptive-responsive/safearea-mediaquery.md",
+      "gold_sections": [
+        "SafeArea"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": 5,
+          "top1": {
+            "doc_id": "flutter-3.24:ui/adaptive-responsive/safearea-mediaquery.md",
+            "heading": "MediaQuery",
+            "snapshot": "flutter-3.24"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.24 ui/adaptive-responsive/safearea-mediaquery.md › MediaQuery",
+            "flutter-3.27 ui/adaptive-responsive/safearea-mediaquery.md › MediaQuery",
+            "latest ui/adaptive-responsive/safearea-mediaquery.md › MediaQuery"
+          ]
+        },
+        "embedding": {
+          "rank": 2,
+          "top1": {
+            "doc_id": "latest:release/breaking-changes/viewport-fit-cover-safe-area.md",
+            "heading": "Option 1: Keep edge-to-edge rendering and wrap UI in `SafeArea`",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest release/breaking-changes/viewport-fit-cover-safe-area.md › Option 1: Keep edge-to-edge rendering and wrap UI in `SafeArea`",
+            "flutter-3.27 ui/adaptive-responsive/safearea-mediaquery.md › SafeArea",
+            "latest ui/adaptive-responsive/safearea-mediaquery.md › SafeArea"
+          ]
+        },
+        "bm25+version": {
+          "rank": 2,
+          "top1": {
+            "doc_id": "flutter-3.27:ui/adaptive-responsive/safearea-mediaquery.md",
+            "heading": "MediaQuery",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 ui/adaptive-responsive/safearea-mediaquery.md › MediaQuery",
+            "flutter-3.27 ui/adaptive-responsive/safearea-mediaquery.md › SafeArea",
+            "flutter-3.27 release/breaking-changes/1-22-deprecations.md › `Scaffold.resizeToAvoidBottomPadding`"
+          ]
+        },
+        "embedding+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:ui/adaptive-responsive/safearea-mediaquery.md",
+            "heading": "SafeArea",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 ui/adaptive-responsive/safearea-mediaquery.md › SafeArea",
+            "flutter-3.27 api/widgets/SafeArea.md › SafeArea.top",
+            "flutter-3.27 api/widgets/SafeArea.md › SafeArea.left"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q12",
+      "question": "Does AppBar add padding for the status bar automatically?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "api/material/AppBar.md",
+      "gold_sections": [
+        "AppBar.primary"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": null,
+          "top1": {
+            "doc_id": "flutter-3.24:api/material/AppBar.md",
+            "heading": "AppBar.systemOverlayStyle",
+            "snapshot": "flutter-3.24"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.24 api/material/AppBar.md › AppBar.systemOverlayStyle",
+            "flutter-3.27 api/material/AppBar.md › AppBar.systemOverlayStyle",
+            "latest api/material/AppBar.md › AppBar.systemOverlayStyle"
+          ]
+        },
+        "embedding": {
+          "rank": 3,
+          "top1": {
+            "doc_id": "flutter-3.24:api/material/AppBar.md",
+            "heading": "AppBar.primary",
+            "snapshot": "flutter-3.24"
+          },
+          "top1_wrong_version": true,
+          "top1_identical_text": true,
+          "top3": [
+            "flutter-3.24 api/material/AppBar.md › AppBar.primary",
+            "latest api/material/AppBar.md › AppBar.primary",
+            "flutter-3.27 api/material/AppBar.md › AppBar.primary"
+          ]
+        },
+        "bm25+version": {
+          "rank": 6,
+          "top1": {
+            "doc_id": "flutter-3.27:api/material/AppBar.md",
+            "heading": "AppBar.systemOverlayStyle",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/material/AppBar.md › AppBar.systemOverlayStyle",
+            "flutter-3.27 api/services/SystemChrome.md › SystemChrome.setSystemUIOverlayStyle",
+            "flutter-3.27 api/widgets/MediaQueryData.md › MediaQueryData.padding"
+          ]
+        },
+        "embedding+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:api/material/AppBar.md",
+            "heading": "AppBar.primary",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 api/material/AppBar.md › AppBar.primary",
+            "flutter-3.27 api/services/SystemChrome.md › SystemChrome.setSystemUIOverlayStyle",
+            "flutter-3.27 api/material/AppBar.md › AppBar.titleSpacing"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q13",
+      "question": "I added the edge-to-edge opt-out attribute but the app is still edge-to-edge in dark mode. Which styles file do I need to change?",
+      "gold_snapshot": "latest",
+      "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
+      "gold_sections": [
+        "Migration guide"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "latest:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Migration guide",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "flutter-3.24 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide"
+          ]
+        },
+        "embedding": {
+          "rank": 4,
+          "top1": {
+            "doc_id": "flutter-3.24:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Migration guide",
+            "snapshot": "flutter-3.24"
+          },
+          "top1_wrong_version": true,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.24 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › "
+          ]
+        },
+        "bm25+version": {
+          "rank": null,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Migration guide",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": true,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Summary"
+          ]
+        },
+        "embedding+version": {
+          "rank": null,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Migration guide",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": true,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.edgeToEdge"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q14",
+      "question": "My app never calls setEnabledSystemUIMode. Is it affected by the new edge-to-edge default in Flutter 3.27?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
+      "gold_sections": [
+        "Summary"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": null,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.24 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context"
+          ]
+        },
+        "embedding": {
+          "rank": 2,
+          "top1": {
+            "doc_id": "flutter-3.24:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "References",
+            "snapshot": "flutter-3.24"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.24 release/breaking-changes/default-systemuimode-edge-to-edge.md › References",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Summary",
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Android 15 (and below)"
+          ]
+        },
+        "bm25+version": {
+          "rank": null,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode (enum, services library)",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Timeline"
+          ]
+        },
+        "embedding+version": {
+          "rank": 1,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Summary",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Summary",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › References",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context"
+          ]
+        }
+      }
+    },
+    {
+      "id": "q15",
+      "question": "Which SystemUiMode values stop working on Android 15 unless I opt out of edge-to-edge?",
+      "gold_snapshot": "flutter-3.27",
+      "gold_path": "api/services/SystemUiMode.md",
+      "gold_sections": [
+        "SystemUiMode (enum, services library)"
+      ],
+      "methods": {
+        "bm25": {
+          "rank": null,
+          "top1": {
+            "doc_id": "latest:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.24 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context"
+          ]
+        },
+        "embedding": {
+          "rank": null,
+          "top1": {
+            "doc_id": "latest:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Android 15 (and below)",
+            "snapshot": "latest"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Android 15 (and below)",
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Android 16 (or later)",
+            "latest release/breaking-changes/default-systemuimode-edge-to-edge.md › Summary"
+          ]
+        },
+        "bm25+version": {
+          "rank": 5,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Migration guide",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › References"
+          ]
+        },
+        "embedding+version": {
+          "rank": 8,
+          "top1": {
+            "doc_id": "flutter-3.27:release/breaking-changes/default-systemuimode-edge-to-edge.md",
+            "heading": "Context",
+            "snapshot": "flutter-3.27"
+          },
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
+          "top3": [
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Context",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › References",
+            "flutter-3.27 release/breaking-changes/default-systemuimode-edge-to-edge.md › Summary"
+          ]
+        }
+      }
+    }
+  ]
+}
