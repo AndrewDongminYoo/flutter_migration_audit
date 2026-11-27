@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 from .evidence import Evidence, Spec, resolve
 from .retrieval import Retriever
-from .signals import AppInputs, Clue, resolve_opt_out
+from .signals import AppInputs, Clue, qualifier_parts, resolve_opt_out
 from .versions import Release, check_range
 
 AFFECTED, NOT_AFFECTED, NEEDS_CHECK = "affected", "not_affected", "needs_check"
@@ -212,13 +212,13 @@ class Auditor:
             # Android resolves each style in the chain separately, so a night
             # variant of any ancestor applies even when the theme itself has
             # no night variant.
-            night_qualifiers = sorted({s.qualifier for s in inp.styles if s.qualifier.startswith("values-night")})
+            night_qualifiers = sorted({s.qualifier for s in inp.styles
+                                       if "night" in qualifier_parts(s.qualifier)[0]})
             for q in night_qualifiers:
                 night = resolve_opt_out(inp.styles, theme_name, q)
                 if night is None or night.value:
                     continue
-                night_styles = [s for name in night.chain for s in inp.styles
-                                if s.name == name and s.qualifier == q]
+                night_styles = [s for s in night.styles if s.qualifier != "values"]
                 if not night_styles:
                     continue  # no night variant on the chain: same as the day result
                 if night.unresolved_value:

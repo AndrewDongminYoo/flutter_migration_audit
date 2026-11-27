@@ -173,3 +173,35 @@ def test_night_variant_of_parent_that_keeps_opt_out(index):
     day = xml(("Base", FRAMEWORK, "true"), ("NormalTheme", "@style/Base", None))
     night = xml(("Base", FRAMEWORK, "true"))
     assert "opt_out_night" not in [f.key for f in run(index, day, night).findings]
+
+
+def test_compatible_qualifiers_follow_android_precedence():
+    from fma.signals import compatible_qualifiers
+
+    available = {"values-night-v35", "values-night", "values-v35", "values-v36", "values-v31"}
+    assert compatible_qualifiers("values-night-v35", available) == [
+        "values-night-v35", "values-night", "values-v35", "values-v31", "values"]
+    assert compatible_qualifiers("values-night", available) == ["values-night", "values"]
+    assert compatible_qualifiers("values", available) == ["values"]
+
+
+def test_night_v35_theme_uses_night_parent_before_default(index):
+    """Codex review on PR #19: values-night-v35/NormalTheme inherits from Base;
+    with no values-night-v35/Base, Android picks values-night/Base, not
+    values/Base."""
+    inputs = AppInputs()
+    read_gradle("targetSdk = flutter.targetSdkVersion", "build.gradle", inputs)
+    read_manifest(MANIFEST.format("NormalTheme"), "AndroidManifest.xml", inputs)
+    read_styles(xml(("Base", FRAMEWORK, "true"), ("NormalTheme", "@style/Base", "true")),
+                "values/styles.xml", "values", inputs)
+    read_styles(xml(("Base", FRAMEWORK, "false")), "values-night/styles.xml", "values-night", inputs)
+    read_styles(xml(("NormalTheme", "@style/Base", None)), "values-night-v35/styles.xml", "values-night-v35", inputs)
+
+    r = resolve_opt_out(inputs.styles, "NormalTheme", "values-night-v35")
+    assert (r.value, r.source) == (False, "Base")
+    assert [s.qualifier for s in r.styles] == ["values-night-v35", "values-night"]
+
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    night = [f for f in report.findings if f.key == "opt_out_night"]
+    assert night and all(f.verdict == NEEDS_CHECK for f in night)
+    assert any("values-night-v35" in f.reason and "`false`" in f.reason for f in night)

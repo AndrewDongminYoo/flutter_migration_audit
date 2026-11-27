@@ -61,6 +61,7 @@ class OptOutResolution:
     # The deciding item is not a literal (for example `@bool/x`), so its
     # value is unknown. It still stops inheritance, as in Android.
     unresolved_value: str | None = None
+    styles: list[Style] = field(default_factory=list)  # resolved styles, in chain order
 
 
 def implicit_parent(style: Style) -> str | None:
@@ -75,34 +76,72 @@ def implicit_parent(style: Style) -> str | None:
     return None
 
 
+def qualifier_parts(qualifier: str) -> tuple[frozenset[str], int | None]:
+    """Split `values-night-v35` into ({"night"}, 35)."""
+    others, version = set(), None
+    for part in qualifier.split("-")[1:]:
+        if re.fullmatch(r"v\d+", part):
+            version = int(part[1:])
+        else:
+            others.add(part)
+    return frozenset(others), version
+
+
+def compatible_qualifiers(target: str, available: set[str]) -> list[str]:
+    """Resource directories Android may pick for `target`, best match first.
+
+    A directory is compatible when its qualifiers are a subset of the target's
+    and its platform version is not higher. Night mode ranks above platform
+    version in Android's precedence, so `values-night` beats `values-v35` for
+    a `values-night-v35` configuration.
+    https://developer.android.com/guide/topics/resources/providing-resources#BestMatch
+    """
+    t_others, t_version = qualifier_parts(target)
+    out = []
+    for q in available | {"values"}:
+        others, version = qualifier_parts(q)
+        if not others <= t_others:
+            continue
+        if version is not None and (t_version is None or version > t_version):
+            continue
+        out.append(q)
+    return sorted(out, key=lambda q: (-len(qualifier_parts(q)[0]), -(qualifier_parts(q)[1] or 0)))
+
+
 def resolve_opt_out(styles: list[Style], name: str, qualifier: str) -> OptOutResolution | None:
     """Follow the style's parents until one sets the opt-out item.
 
-    Parents are looked up in the same resource directory first, then in the
-    default `values` directory, as Android does. Returns None if the
-    requested style itself is not provided.
+    `qualifier` is the configuration to resolve for (`values`, `values-night`,
+    `values-night-v35`). Each style in the chain, parents included, is looked
+    up in the best-matching compatible resource directory, as Android does.
+    Returns None if the requested style itself is not provided.
     """
+    order = compatible_qualifiers(qualifier, {s.qualifier for s in styles})
+
     def find(n: str) -> Style | None:
-        for q in (qualifier, "values"):
+        for q in order:
             for s in styles:
                 if s.name == n and s.qualifier == q:
                     return s
         return None
 
     chain: list[str] = []
+    resolved: list[Style] = []
     current = name
     while current and current not in chain:
         style = find(current)
         if style is None:
             if not chain:
                 return None
-            return OptOutResolution(None, None, None, chain, missing_parent=current)
+            return OptOutResolution(None, None, None, chain, missing_parent=current, styles=resolved)
         chain.append(current)
+        resolved.append(style)
         if style.opt_out is not None:
             return OptOutResolution(style.opt_out_value, style.opt_out, style.name, chain,
-                                    unresolved_value=None if style.opt_out_value is not None else style.opt_out_raw)
+                                    unresolved_value=None if style.opt_out_value is not None else style.opt_out_raw,
+                                    styles=resolved)
         current = implicit_parent(style)
-    return OptOutResolution(None, None, None, chain)
+    return OptOutResolution(None, None, None, chain, styles=resolved)
 
 
 @dataclass
