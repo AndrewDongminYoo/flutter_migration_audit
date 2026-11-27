@@ -12,7 +12,10 @@ from dataclasses import dataclass, field
 
 from .evidence import Evidence, Spec, resolve
 from .retrieval import Retriever
-from .signals import AppInputs, Clue
+from .signals import (
+    DEVICE_API, THRESHOLD_KINDS, AppInputs, Clue, config_name, device_config, normalize_config,
+    qualifier_parts, resolve_opt_out, unmodeled_qualifiers,
+)
 from .versions import Release, check_range
 
 AFFECTED, NOT_AFFECTED, NEEDS_CHECK = "affected", "not_affected", "needs_check"
@@ -42,6 +45,9 @@ E = {
     "opt_out_works": Spec(
         "opt_out_works", "opt out edge-to-edge windowOptOutEdgeToEdgeEnforcement styles.xml NormalTheme style",
         "This modified style opts your app out", kinds=BC),
+    "opt_out_parent": Spec(
+        "opt_out_parent", "parent style child styles opt out modify the parent only windowOptOutEdgeToEdgeEnforcement",
+        "you can modify the parent only", kinds=BC),
     "opt_out_temporary": Spec(
         "opt_out_temporary", EDGE_QUERY + " workaround temporary migrate before",
         "Android plans for the workaround detailed here to be temporary", kinds=BC),
@@ -185,36 +191,156 @@ class Auditor:
                            "android:windowOptOutEdgeToEdgeEnforcement 항목이 있는지 확인하세요.")
             return None
         theme_name, theme_clue = inp.normal_theme or ("NormalTheme", None)
-        day = [s for s in inp.styles if s.name == theme_name and s.qualifier == "values"]
         clues = [theme_clue] if theme_clue else []
-        if not day:
+        day = resolve_opt_out(inp.styles, theme_name, "values")
+        if day is None:
             self.add("opt_out", title, NEEDS_CHECK,
                      f"앱이 쓰는 스타일 `{theme_name}`이 제공된 res/values/styles.xml에 없습니다.",
                      clues, check=f"`{theme_name}` 스타일 정의를 찾아 opt-out 항목을 확인하세요.")
             return None
-        style = day[0]
-        if style.opt_out:
+        own = day.styles[0]  # the theme as Android selects it (may be values-v21 etc.)
+        inherited = day.source is not None and day.source != theme_name
+        if day.value:
             caveat = "" if inp.manifest_provided else " (AndroidManifest.xml을 받지 못해 이 스타일이 실제로 쓰이는지는 확인하지 않았습니다.)"
+            where = (f"`{theme_name}`이 부모 스타일 `{day.source}`에서 opt-out 항목을 상속받아"
+                     if inherited else f"`{theme_name}`에 opt-out 항목이 있어")
+            specs = [E["opt_out_works"], E["opt_out_temporary"]]
+            if inherited:
+                specs.insert(1, E["opt_out_parent"])
             self.add("opt_out", title, NOT_AFFECTED,
-                     f"`{theme_name}`에 opt-out 항목이 있어 Android 15 기기에서도 기존처럼 시스템 바 바깥에 그려집니다. "
+                     f"{where} Android 15 기기에서도 기존처럼 시스템 바 바깥에 그려집니다. "
                      "다만 문서는 이 방법을 임시 조치로 안내합니다." + caveat,
-                     clues + [style.opt_out], [E["opt_out_works"], E["opt_out_temporary"]],
+                     clues + ([own.clue] if inherited else []) + [day.clue], specs,
                      ["Android 15(API 35) 에뮬레이터에서 첫 화면 상단 콘텐츠가 상태바 아래로 들어가지 않는지 확인한다."])
-            night = [s for s in inp.styles if s.name == theme_name and s.qualifier.startswith("values-night")]
-            for s in night:
-                if not s.opt_out:
-                    self.add("opt_out_night", "다크 모드 스타일의 opt-out", NEEDS_CHECK,
-                             f"`{s.qualifier}/styles.xml`의 `{theme_name}`에는 opt-out 항목이 없습니다. "
-                             "Flutter 3.27 시점 문서는 다크 모드 스타일을 언급하지 않았고, 이후 문서에서 같은 항목을 넣으라는 안내가 추가됐습니다.",
-                             [s.clue], [E["opt_out_night"]],
-                             ["기기를 다크 모드로 바꾸고 Android 15 에뮬레이터에서 첫 화면 상단을 다시 확인한다."],
-                             check="다크 모드에서도 opt-out이 필요한지 확인하세요.")
+            if self.opt_out_variants(theme_name):
+                # Some configuration may lose the opt-out, so the checks that
+                # assume edge-to-edge still run.
+                return None
             return True
-        self.add("opt_out", title, AFFECTED,
-                 f"`{theme_name}`에 opt-out 항목이 없어 Android 15 이상 기기에서 앱이 edge-to-edge로 그려집니다.",
-                 clues + [style.clue], [E["edge_default"]],
+        if day.unresolved_value:
+            self.add("opt_out", title, NEEDS_CHECK,
+                     f"`{day.source}`의 opt-out 항목 값이 `{day.unresolved_value}`라서 참인지 거짓인지 알 수 없습니다. "
+                     "이 항목이 있으면 부모 스타일의 값은 쓰이지 않습니다.",
+                     clues + [day.clue], [E["opt_out_works"]],
+                     check=f"`{day.unresolved_value}`가 가리키는 값(예: res/values/bools.xml)을 확인하세요.")
+            return None
+        if day.missing_parent:
+            self.add("opt_out", title, NEEDS_CHECK,
+                     f"`{theme_name}`의 부모 스타일 `{day.missing_parent}`이 제공된 styles.xml에 없어, "
+                     "opt-out 항목을 상속받는지 확인할 수 없습니다.",
+                     clues + [own.clue], [E["opt_out_parent"]],
+                     check=f"`{day.missing_parent}` 스타일 정의가 들어 있는 styles.xml을 함께 넣어 주세요.")
+            return None
+        if day.value is False:
+            reason = (f"opt-out 항목이 `false`로 설정되어 있어"
+                      + (f"(`{day.source}`에서 상속)" if inherited else "")
+                      + " Android 15 이상 기기에서 앱이 edge-to-edge로 그려집니다.")
+            extra = [day.clue]
+        else:
+            reason = (f"`{theme_name}`과 그 부모 스타일에 opt-out 항목이 없어 "
+                      "Android 15 이상 기기에서 앱이 edge-to-edge로 그려집니다.")
+            extra = []
+        self.add("opt_out", title, AFFECTED, reason,
+                 clues + [own.clue] + extra, [E["edge_default"]],
                  ["Android 15(API 35) 에뮬레이터에서 앱 화면이 상태바·내비게이션 바 뒤까지 그려지는지 확인한다."])
         return False
+
+    MAX_CONFIGS = 256
+
+    def opt_out_variants(self, theme_name: str) -> bool:
+        """Check the other device configurations the supplied resources can produce.
+
+        The default result covers a day-mode API 35 device. Android resolves
+        each style in the chain separately, so qualified variants of different
+        ancestors can combine (values-en/NormalTheme with values-night/Base
+        gives an English night-mode result neither directory shows alone).
+        Every combination of the supplied qualifier values is resolved; only
+        the smallest configurations that lose the opt-out are reported.
+        """
+        inp = self.inputs
+        before = len(self.findings)
+        unmodeled = sorted({s.qualifier for s in inp.styles if unmodeled_qualifiers(s.qualifier)})
+        if unmodeled:
+            kinds_text = ", ".join(sorted({k for q in unmodeled for k in unmodeled_qualifiers(q)}))
+            self.add("opt_out_variant", "정확히 판단하지 않는 리소스 한정자", NEEDS_CHECK,
+                     f"제공된 리소스에 이 도구가 Android 선택 규칙을 정확히 따라가지 않는 한정자({kinds_text})가 있습니다: "
+                     + ", ".join(f"`{q}`" for q in unmodeled)
+                     + ". 이 디렉터리의 스타일이 opt-out 판단에 영향을 주는지는 확인하지 않았습니다.",
+                     [s.clue for s in inp.styles if s.qualifier in unmodeled][:5],
+                     tests=["해당 한정자에 맞는 Android 15 기기나 에뮬레이터 설정(화면 크기, 밀도, 언어)에서 첫 화면 상단을 확인한다."],
+                     check="이 디렉터리들의 스타일에서도 opt-out이 유지되는지 직접 확인하세요.")
+        values: dict[str, set] = {}
+        for q in {s.qualifier for s in inp.styles} - set(unmodeled):
+            for kind, value in qualifier_parts(q).items():
+                if kind == "version":
+                    continue  # every configuration is an API 35 device
+                values.setdefault(kind, set()).add(value)
+        kinds = sorted(values)
+        combos = 1
+        for kind in kinds:
+            combos *= len(values[kind]) + 1
+        if combos > self.MAX_CONFIGS:
+            self.add("opt_out_variant", "다른 기기 설정의 opt-out", NEEDS_CHECK,
+                     f"제공된 리소스 한정자 조합이 {combos}개라서 모두 확인하지 않았습니다. "
+                     "기본 설정에서는 opt-out이 적용됩니다.",
+                     check="언어·다크 모드·화면 크기 등 한정자별로 opt-out이 유지되는지 직접 확인하세요.")
+            return True
+        default = device_config("values")
+        configs = [dict(default)]
+        for kind in kinds:
+            options = sorted(values[kind] | {"notnight"}) if kind == "night" else [None, *sorted(values[kind], key=str)]
+            configs = [c | ({kind: v} if v is not None else {}) for c in configs for v in options]
+        normalized: list[dict] = []
+        for c in configs:
+            c = normalize_config(c, set(kinds))
+            if c != default and c not in normalized:
+                normalized.append(c)
+        configs = sorted(normalized, key=len)
+        reported: list[tuple[dict, tuple]] = []
+
+        def covers(smaller: dict, larger: dict) -> bool:
+            for k, v in smaller.items():
+                if k not in larger:
+                    return False
+                if larger[k] != v and not (k in THRESHOLD_KINDS and larger[k] >= v):
+                    return False
+            return True
+
+        for config in configs:
+            result = resolve_opt_out(inp.styles, theme_name, config)
+            if result is None or result.value:
+                continue
+            outcome = (tuple((s.qualifier, s.name) for s in result.styles),
+                       result.value, result.unresolved_value, result.missing_parent)
+            if any(o == outcome and covers(c, config) for c, o in reported):
+                continue  # a smaller configuration with the same style chain already shows this
+            reported.append((config, outcome))
+            name = config_name(config)
+            if result.unresolved_value:
+                detail = f"opt-out 항목 값이 `{result.unresolved_value}`라서 직접 확인할 수 없습니다"
+            elif result.value is False:
+                detail = f"`{result.source}`가 opt-out 항목을 `false`로 덮어씁니다"
+            elif result.missing_parent:
+                detail = f"부모 스타일 `{result.missing_parent}`이 입력에 없어 확인할 수 없습니다"
+            else:
+                detail = "적용되는 스타일 체인에 opt-out 항목이 없습니다"
+            used = " → ".join(f"{s.qualifier}/{s.name}" for s in result.styles)
+            clues = [s.clue for s in result.styles] + ([result.clue] if result.clue else [])
+            if config.get("night") == "night":
+                self.add("opt_out_night", "다크 모드 스타일의 opt-out", NEEDS_CHECK,
+                         f"`{name}` 설정에서 Android가 고르는 스타일 체인({used})에서 {detail}. "
+                         "Flutter 3.27 시점 문서는 다크 모드 스타일을 언급하지 않았고, 이후 문서에서 같은 항목을 넣으라는 안내가 추가됐습니다.",
+                         clues, [E["opt_out_night"]],
+                         ["기기를 다크 모드로 바꾸고 Android 15 에뮬레이터에서 첫 화면 상단을 다시 확인한다."],
+                         check="다크 모드에서도 opt-out이 필요한지 확인하세요.")
+            else:
+                self.add("opt_out_variant", f"`{name}` 설정의 opt-out", NEEDS_CHECK,
+                         f"기본 설정에서는 opt-out이 적용되지만, `{name}` 설정에서 Android가 고르는 스타일 체인({used})에서 {detail}. "
+                         "Flutter 3.27 문서는 이런 리소스 변형을 다루지 않으므로 기기에서 직접 확인해야 합니다.",
+                         clues,
+                         tests=[f"Android 15 에뮬레이터를 `{name}`에 해당하는 설정으로 바꾸고 첫 화면 상단을 다시 확인한다."],
+                         check=f"`{name}` 설정에서도 opt-out이 필요한지 확인하세요.")
+        return len(self.findings) > before
 
     def ui_mode(self) -> None:
         inp = self.inputs
