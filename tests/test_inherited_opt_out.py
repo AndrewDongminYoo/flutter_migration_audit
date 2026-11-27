@@ -142,3 +142,34 @@ def test_night_style_inheriting_from_values_parent(index, night_inherits):
     night = xml(("NormalTheme", "@style/Base" if night_inherits else FRAMEWORK, None))
     keys = [f.key for f in run(index, day, night).findings]
     assert ("opt_out_night" in keys) is not night_inherits
+
+
+# --- review follow-ups (PR #19) ----------------------------------------------
+
+def test_resource_reference_stops_inheritance():
+    r = resolve([("Base", FRAMEWORK, "true"), ("NormalTheme", "@style/Base", "@bool/edge_opt_out")])
+    assert r.value is None and r.source == "NormalTheme" and r.unresolved_value == "@bool/edge_opt_out"
+
+
+def test_resource_reference_needs_check(index):
+    f = finding(run(index, xml(("Base", FRAMEWORK, "true"), ("NormalTheme", "@style/Base", "@bool/edge_opt_out"))),
+                "opt_out")
+    assert f.verdict == NEEDS_CHECK and "`@bool/edge_opt_out`" in f.check
+
+
+@pytest.mark.parametrize("night_base_value, expect", [("false", "`false`"), (None, "opt-out 항목이 없습니다")])
+def test_night_variant_of_parent_only(index, night_base_value, expect):
+    """values/NormalTheme inherits true from values/Base, but only Base has a
+    night variant. Android picks values-night/Base at night."""
+    day = xml(("Base", FRAMEWORK, "true"), ("NormalTheme", "@style/Base", None))
+    night = xml(("Base", FRAMEWORK, night_base_value))
+    report = run(index, day, night)
+    assert finding(report, "opt_out").verdict == NOT_AFFECTED
+    f = finding(report, "opt_out_night")
+    assert f.verdict == NEEDS_CHECK and expect in f.reason and "NormalTheme → Base" in f.reason
+
+
+def test_night_variant_of_parent_that_keeps_opt_out(index):
+    day = xml(("Base", FRAMEWORK, "true"), ("NormalTheme", "@style/Base", None))
+    night = xml(("Base", FRAMEWORK, "true"))
+    assert "opt_out_night" not in [f.key for f in run(index, day, night).findings]

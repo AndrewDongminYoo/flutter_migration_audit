@@ -44,7 +44,8 @@ class Style:
     qualifier: str  # resource directory, e.g. "values" or "values-night"
     opt_out: Clue | None  # the opt-out item, whatever its value
     clue: Clue
-    opt_out_value: bool | None = None
+    opt_out_value: bool | None = None  # None if absent or not a literal
+    opt_out_raw: str | None = None  # the item's text, e.g. "true" or "@bool/x"
     # Value of the `parent` attribute, if any: "NormalBase" for a local style,
     # "@android:style/..." for a framework style.
     parent: str | None = None
@@ -57,6 +58,9 @@ class OptOutResolution:
     source: str | None  # name of the style that sets it
     chain: list[str]  # styles visited, starting with the requested one
     missing_parent: str | None = None  # a local parent that was not provided
+    # The deciding item is not a literal (for example `@bool/x`), so its
+    # value is unknown. It still stops inheritance, as in Android.
+    unresolved_value: str | None = None
 
 
 def implicit_parent(style: Style) -> str | None:
@@ -94,8 +98,9 @@ def resolve_opt_out(styles: list[Style], name: str, qualifier: str) -> OptOutRes
                 return None
             return OptOutResolution(None, None, None, chain, missing_parent=current)
         chain.append(current)
-        if style.opt_out_value is not None:
-            return OptOutResolution(style.opt_out_value, style.opt_out, style.name, chain)
+        if style.opt_out is not None:
+            return OptOutResolution(style.opt_out_value, style.opt_out, style.name, chain,
+                                    unresolved_value=None if style.opt_out_value is not None else style.opt_out_raw)
         current = implicit_parent(style)
     return OptOutResolution(None, None, None, chain)
 
@@ -160,7 +165,7 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
 STYLE = re.compile(r'<style\s+name="([\w.]+)"([^>]*)>(.*?)</style>', re.DOTALL)
 STYLE_PARENT = re.compile(r'\bparent="([^"]*)"')
 OPT_OUT_ITEM = re.compile(
-    r'<item\s+name="' + re.escape(OPT_OUT_ATTR) + r'"\s*>\s*(true|false)\s*</item>'
+    r'<item\s+name="' + re.escape(OPT_OUT_ATTR) + r'"\s*>\s*([^<]*?)\s*</item>'
 )
 
 
@@ -170,16 +175,17 @@ def read_styles(text: str, name: str, qualifier: str, inputs: AppInputs) -> None
         start_line = text.count("\n", 0, m.start()) + 1
         body_offset = m.start(3)
         opt = OPT_OUT_ITEM.search(m.group(3))
-        opt_clue, opt_value = None, None
+        opt_clue, opt_value, opt_raw = None, None, None
         if opt:
             line = text.count("\n", 0, body_offset + opt.start()) + 1
             opt_clue = Clue(name, line, text.splitlines()[line - 1])
-            opt_value = opt.group(1) == "true"
+            opt_raw = opt.group(1)
+            opt_value = {"true": True, "false": False}.get(opt_raw)
         parent = STYLE_PARENT.search(m.group(2))
         inputs.styles.append(
             Style(m.group(1), qualifier, opt_clue,
                   Clue(name, start_line, text.splitlines()[start_line - 1]),
-                  opt_out_value=opt_value,
+                  opt_out_value=opt_value, opt_out_raw=opt_raw,
                   parent=parent.group(1) if parent else None)
         )
 

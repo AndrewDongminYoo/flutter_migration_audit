@@ -209,19 +209,38 @@ class Auditor:
                      "다만 문서는 이 방법을 임시 조치로 안내합니다." + caveat,
                      clues + ([own.clue] if inherited else []) + [day.clue], specs,
                      ["Android 15(API 35) 에뮬레이터에서 첫 화면 상단 콘텐츠가 상태바 아래로 들어가지 않는지 확인한다."])
-            for s in inp.styles:
-                if s.name != theme_name or not s.qualifier.startswith("values-night"):
+            # Android resolves each style in the chain separately, so a night
+            # variant of any ancestor applies even when the theme itself has
+            # no night variant.
+            night_qualifiers = sorted({s.qualifier for s in inp.styles if s.qualifier.startswith("values-night")})
+            for q in night_qualifiers:
+                night = resolve_opt_out(inp.styles, theme_name, q)
+                if night is None or night.value:
                     continue
-                night = resolve_opt_out(inp.styles, theme_name, s.qualifier)
-                if night and night.value:
-                    continue
+                night_styles = [s for name in night.chain for s in inp.styles
+                                if s.name == name and s.qualifier == q]
+                if not night_styles:
+                    continue  # no night variant on the chain: same as the day result
+                if night.unresolved_value:
+                    detail = f"opt-out 항목 값이 `{night.unresolved_value}`라서 직접 확인할 수 없습니다"
+                elif night.value is False:
+                    detail = f"`{night.source}`가 opt-out 항목을 `false`로 덮어씁니다"
+                else:
+                    detail = "다크 모드에서 적용되는 스타일 체인에 opt-out 항목이 없습니다"
                 self.add("opt_out_night", "다크 모드 스타일의 opt-out", NEEDS_CHECK,
-                         f"`{s.qualifier}/styles.xml`의 `{theme_name}`에는 opt-out 항목이 없고, 부모 스타일에서도 상속받지 않습니다. "
+                         f"`{q}/styles.xml` 기준으로 `{theme_name}`의 스타일 체인({' → '.join(night.chain)})에서 {detail}. "
                          "Flutter 3.27 시점 문서는 다크 모드 스타일을 언급하지 않았고, 이후 문서에서 같은 항목을 넣으라는 안내가 추가됐습니다.",
-                         [s.clue], [E["opt_out_night"]],
+                         [s.clue for s in night_styles] + ([night.clue] if night.clue else []), [E["opt_out_night"]],
                          ["기기를 다크 모드로 바꾸고 Android 15 에뮬레이터에서 첫 화면 상단을 다시 확인한다."],
                          check="다크 모드에서도 opt-out이 필요한지 확인하세요.")
             return True
+        if day.unresolved_value:
+            self.add("opt_out", title, NEEDS_CHECK,
+                     f"`{day.source}`의 opt-out 항목 값이 `{day.unresolved_value}`라서 참인지 거짓인지 알 수 없습니다. "
+                     "이 항목이 있으면 부모 스타일의 값은 쓰이지 않습니다.",
+                     clues + [day.clue], [E["opt_out_works"]],
+                     check=f"`{day.unresolved_value}`가 가리키는 값(예: res/values/bools.xml)을 확인하세요.")
+            return None
         if day.missing_parent:
             self.add("opt_out", title, NEEDS_CHECK,
                      f"`{theme_name}`의 부모 스타일 `{day.missing_parent}`이 제공된 styles.xml에 없어, "
