@@ -34,7 +34,7 @@ api.flutter.dev는 최신 릴리스만 제공합니다. 그래서 이전 버전�
 
 `SystemUiMode` 문서도 판본마다 다릅니다. 3.24에는 API 35 언급이 없습니다. 3.27에는 "Android 15(API 35)를 대상으로 하면 edge-to-edge가 기본"이라는 설명이 추가됐고, 3.50.1에는 "API 36 이상이면 시스템이 이 값을 무시한다"는 설명이 더해졌습니다.
 
-`{@macro}`로 다른 곳의 템플릿을 불러오는 부분은 아직 풀어서 넣지 않았습니다. 해당 멤버는 본문이 비어 있거나 짧을 수 있습니다.
+`{@macro}`로 다른 곳의 `{@template}`을 불러오는 부분은 dartdoc처럼 펼쳐 넣습니다. 템플릿은 같은 태그의 `packages/flutter/lib` 아래 모든 Dart 파일에서 모읍니다. 예를 들어 `SliverAppBar.primary`에는 `AppBar.primary`의 설명("상태바 높이만큼 위쪽을 띄운다")이 들어갑니다. `dart:ui`처럼 그 밖에 정의된 템플릿은 펼치지 못하고, 매니페스트의 `unresolved_macros`에 남깁니다. 지금은 세 스냅샷 모두 `dart.ui.ViewConfiguration.displayFeatures` 하나뿐입니다.
 
 ## 같은 문서, 세 가지 판본
 

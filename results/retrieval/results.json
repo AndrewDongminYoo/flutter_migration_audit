@@ -18,7 +18,7 @@
     "bm25+version": {
       "hit@1": 0.3333333333333333,
       "hit@3": 0.5333333333333333,
-      "mrr@10": 0.48444444444444446,
+      "mrr@10": 0.4828571428571429,
       "wrong_version@1": 0.06666666666666667
     },
     "embedding+version": {
@@ -50,7 +50,7 @@
           "top3": [
             "flutter-3.27 api/material/AppBar.md › AppBar (class, material library)",
             "flutter-3.24 api/material/AppBar.md › AppBar (class, material library)",
-            "latest api/material/AppBar.md › AppBar (class, material library)"
+            "latest release/breaking-changes/android-surface-plugins.md › Timeline"
           ]
         },
         "embedding": {
@@ -80,7 +80,7 @@
           "top3": [
             "flutter-3.27 api/material/AppBar.md › AppBar (class, material library)",
             "flutter-3.27 release/breaking-changes/android-surface-plugins.md › Timeline",
-            "flutter-3.27 api/widgets/SafeArea.md › SafeArea (class, widgets library)"
+            "flutter-3.27 add-to-app/android/add-flutter-screen.md › Step 3: (Optional) Use a cached FlutterEngine"
           ]
         },
         "embedding+version": {
@@ -850,7 +850,7 @@
           ]
         },
         "bm25+version": {
-          "rank": 6,
+          "rank": 7,
           "top1": {
             "doc_id": "flutter-3.27:api/material/AppBar.md",
             "heading": "AppBar.systemOverlayStyle",
@@ -861,7 +861,7 @@
           "top3": [
             "flutter-3.27 api/material/AppBar.md › AppBar.systemOverlayStyle",
             "flutter-3.27 api/services/SystemChrome.md › SystemChrome.setSystemUIOverlayStyle",
-            "flutter-3.27 api/widgets/MediaQueryData.md › MediaQueryData.padding"
+            "flutter-3.27 api/material/SliverAppBar.md › SliverAppBar.systemOverlayStyle"
           ]
         },
         "embedding+version": {
@@ -875,8 +875,8 @@
           "top1_identical_text": false,
           "top3": [
             "flutter-3.27 api/material/AppBar.md › AppBar.primary",
-            "flutter-3.27 api/services/SystemChrome.md › SystemChrome.setSystemUIOverlayStyle",
-            "flutter-3.27 api/material/AppBar.md › AppBar.titleSpacing"
+            "flutter-3.27 api/material/AppBar.md › AppBar.titleSpacing",
+            "flutter-3.27 api/services/SystemChrome.md › SystemChrome.setSystemUIOverlayStyle"
           ]
         }
       }
