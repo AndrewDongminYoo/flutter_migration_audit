@@ -8,8 +8,9 @@ from fma.rules import audit
 from fma.signals import discover
 
 ROOT = Path(__file__).resolve().parents[1]
+# Markdown formatters may put a blank line between the markers and the fence.
 BLOCK = re.compile(
-    r"<!-- fma-example:start -->\n```text\n(.*?)\n```\n<!-- fma-example:end -->",
+    r"<!-- fma-example:start -->\n+```text\n(.*?)\n```\n+<!-- fma-example:end -->",
     re.DOTALL,
 )
 
