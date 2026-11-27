@@ -59,9 +59,18 @@ edge-to-edge 마이그레이션 문서는 코퍼스에 세 가지 판본이 있�
 
 예외는 하나 있습니다. 3.27 판본이 빠뜨린 다크 모드 스타일(`values-night`) 안내는 이후 판본에서 추가됐습니다. 이 경우에만 이후 판본을 인용하고, 출력에 "목표 버전 이후에 고쳐진 내용"이라고 표시합니다.
 
+## 검색 방식 비교
+
+질문 15개로 키워드 검색(BM25), 임베딩 검색, 그리고 각각에 버전 필터를 붙인 방식을 비교했습니다. 필터가 없는 임베딩 검색은 정답을 1위에 올린 질문이 하나도 없었고, 15개 중 5개에서 1위가 다른 판본이었습니다. 버전 필터를 붙인 임베딩 검색은 1위 적중률 0.60으로 네 방식 중 가장 좋았습니다. 버전 필터가 오히려 정답을 막는 경우와, 필터로도 해결되지 않는 실패도 함께 정리했습니다. 자세한 내용은 [docs/retrieval-comparison.md](docs/retrieval-comparison.md)에 있습니다.
+
+```sh
+uv run --group eval scripts/compare_retrieval.py
+```
+
 ## 문서
 
 - [docs/corpus.md](docs/corpus.md): 문서 스냅샷 기준, 판본별 차이, 버전 메타데이터의 한계
+- [docs/retrieval-comparison.md](docs/retrieval-comparison.md): 검색 방식 비교 결과와 실패 분석
 
 ## 테스트
 
