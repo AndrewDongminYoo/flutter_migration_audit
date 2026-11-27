@@ -54,7 +54,11 @@ def cli_scope() -> set[tuple[str, str | None]]:
 
 def cli_chunks(chunks: list[Chunk]) -> list[Chunk]:
     scope = cli_scope()
-    return [c for c in chunks if (c.snapshot_id, c.kind) in scope or (c.snapshot_id, None) in scope]
+    return [
+        c
+        for c in chunks
+        if (c.snapshot_id, c.kind) in scope or (c.snapshot_id, None) in scope
+    ]
 
 
 def get_retriever(kind: str = DEFAULT) -> Retriever:

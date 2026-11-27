@@ -37,15 +37,24 @@ def passage_text(chunk: Chunk) -> str:
     return f"{chunk.title}\n{chunk.heading}\n{chunk.text}"[:MAX_CHARS]
 
 
-def cache_path(chunks: list[Chunk], model: str = MODEL, cache_dir: Path = CACHE) -> Path:
+def cache_path(
+    chunks: list[Chunk], model: str = MODEL, cache_dir: Path = CACHE
+) -> Path:
     texts = [passage_text(c) for c in chunks]
-    key = hashlib.sha256(("\0".join([model] + [c.chunk_id for c in chunks] + texts)).encode()).hexdigest()[:16]
+    key = hashlib.sha256(
+        ("\0".join([model] + [c.chunk_id for c in chunks] + texts)).encode()
+    ).hexdigest()[:16]
     return cache_dir / f"{model.replace('/', '__')}-{key}.npy"
 
 
 class Dense:
-    def __init__(self, chunks: list[Chunk], model: str = MODEL, cache_dir: Path = CACHE,
-                 build: bool = True):
+    def __init__(
+        self,
+        chunks: list[Chunk],
+        model: str = MODEL,
+        cache_dir: Path = CACHE,
+        build: bool = True,
+    ):
         self.chunks = chunks
         self.model_name = model
         self.path = cache_path(chunks, model, cache_dir)
@@ -62,14 +71,22 @@ class Dense:
     def _build(self) -> np.ndarray:
         texts = [passage_text(c) for c in self.chunks]
         threads = embed_threads()
-        print(f"문서 {len(texts)}개 섹션을 임베딩합니다. 처음 한 번만 하며 몇 분 걸립니다"
-              + (f" (스레드 {threads}개)." if threads else "."), file=sys.stderr)
+        print(
+            f"문서 {len(texts)}개 섹션을 임베딩합니다. 처음 한 번만 하며 몇 분 걸립니다"
+            + (f" (스레드 {threads}개)." if threads else "."),
+            file=sys.stderr,
+        )
         started = time.time()
-        vecs = np.array(list(self.model.passage_embed(texts, batch_size=64)), dtype=np.float32)
+        vecs = np.array(
+            list(self.model.passage_embed(texts, batch_size=64)), dtype=np.float32
+        )
         matrix = vecs / np.linalg.norm(vecs, axis=1, keepdims=True)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         np.save(self.path, matrix)
-        print(f"임베딩 완료: {time.time() - started:.0f}초, {self.path.name}", file=sys.stderr)
+        print(
+            f"임베딩 완료: {time.time() - started:.0f}초, {self.path.name}",
+            file=sys.stderr,
+        )
         return matrix
 
     def search(

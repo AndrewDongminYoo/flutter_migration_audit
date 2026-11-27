@@ -22,7 +22,14 @@ from pathlib import Path
 
 from fma.corpus import Chunk, Index, load_chunks
 from fma.dense import MODEL, Dense
-from fma.evalset import TARGET, doc_path, gold_sections, is_gold, is_wrong_version, load_questions
+from fma.evalset import (
+    TARGET,
+    doc_path,
+    gold_sections,
+    is_gold,
+    is_wrong_version,
+    load_questions,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "results" / "retrieval"
@@ -32,9 +39,18 @@ TOP_K = 10
 
 # --- evaluation ----------------------------------------------------------------
 
+
 def same_text_as_gold_revision(chunks: list[Chunk], chunk: Chunk, q) -> bool:
-    twin = next((c for c in chunks if c.snapshot_id == q.gold_snapshot
-                 and doc_path(c) == doc_path(chunk) and c.heading == chunk.heading), None)
+    twin = next(
+        (
+            c
+            for c in chunks
+            if c.snapshot_id == q.gold_snapshot
+            and doc_path(c) == doc_path(chunk)
+            and c.heading == chunk.heading
+        ),
+        None,
+    )
     return twin is not None and twin.normalized == chunk.normalized
 
 
@@ -43,21 +59,42 @@ def evaluate(questions, chunks, methods):
     for q in questions:
         sections = gold_sections(chunks, q)
         assert sections, f"{q.id}: no gold chunk in corpus"
-        row = {"id": q.id, "question": q.question, "gold_snapshot": q.gold_snapshot,
-               "gold_path": q.path, "gold_sections": sorted(sections), "methods": {}}
+        row = {
+            "id": q.id,
+            "question": q.question,
+            "gold_snapshot": q.gold_snapshot,
+            "gold_path": q.path,
+            "gold_sections": sorted(sections),
+            "methods": {},
+        }
         for name, search in methods.items():
             ranked = search(q.question)
-            rank = next((i for i, (_, c) in enumerate(ranked, 1) if is_gold(c, q)), None)
+            rank = next(
+                (i for i, (_, c) in enumerate(ranked, 1) if is_gold(c, q)), None
+            )
             top = ranked[0][1] if ranked else None
             wrong = bool(top and is_wrong_version(top, q, sections))
             row["methods"][name] = {
                 "rank": rank,
-                "top1": {"doc_id": top.doc_id, "heading": top.heading, "snapshot": top.snapshot_id} if top else None,
+                "top1": (
+                    {
+                        "doc_id": top.doc_id,
+                        "heading": top.heading,
+                        "snapshot": top.snapshot_id,
+                    }
+                    if top
+                    else None
+                ),
                 "top1_wrong_version": wrong,
                 # Same section, same text, different snapshot: only metadata
                 # can tell these apart.
-                "top1_identical_text": bool(wrong and same_text_as_gold_revision(chunks, top, q)),
-                "top3": [f"{c.snapshot_id} {doc_path(c)} › {c.heading}" for _, c in ranked[:3]],
+                "top1_identical_text": bool(
+                    wrong and same_text_as_gold_revision(chunks, top, q)
+                ),
+                "top3": [
+                    f"{c.snapshot_id} {doc_path(c)} › {c.heading}"
+                    for _, c in ranked[:3]
+                ],
             }
         rows.append(row)
     return rows
@@ -72,29 +109,49 @@ def summarize(rows, names):
             "hit@1": sum(1 for x in ranks if x == 1) / n,
             "hit@3": sum(1 for x in ranks if x and x <= 3) / n,
             "mrr@10": sum(1 / x for x in ranks if x) / n,
-            "wrong_version@1": sum(r["methods"][name]["top1_wrong_version"] for r in rows) / n,
+            "wrong_version@1": sum(
+                r["methods"][name]["top1_wrong_version"] for r in rows
+            )
+            / n,
         }
     return summary
 
 
 def render(rows, summary, names) -> str:
-    out = ["# 검색 방식 비교", "",
-           f"질문 {len(rows)}개, 목표 버전 스냅샷 `{TARGET}`, 임베딩 모델 `{MODEL}`, BM25는 `fma.corpus.Index`.",
-           "정답은 정해진 판본의 정해진 문서에서 정답 문장이 들어 있는 섹션입니다. "
-           "잘못된 판본@1은 1위 결과가 같은 문서의 같은 섹션이지만 판본이 다른 경우의 비율입니다.", "",
-           "| 방식 | hit@1 | hit@3 | MRR@10 | 잘못된 판본@1 |", "| --- | --- | --- | --- | --- |"]
+    out = [
+        "# 검색 방식 비교",
+        "",
+        f"질문 {len(rows)}개, 목표 버전 스냅샷 `{TARGET}`, 임베딩 모델 `{MODEL}`, BM25는 `fma.corpus.Index`.",
+        "정답은 정해진 판본의 정해진 문서에서 정답 문장이 들어 있는 섹션입니다. "
+        "잘못된 판본@1은 1위 결과가 같은 문서의 같은 섹션이지만 판본이 다른 경우의 비율입니다.",
+        "",
+        "| 방식 | hit@1 | hit@3 | MRR@10 | 잘못된 판본@1 |",
+        "| --- | --- | --- | --- | --- |",
+    ]
     for name in names:
         s = summary[name]
-        out.append(f"| {name} | {s['hit@1']:.2f} | {s['hit@3']:.2f} | {s['mrr@10']:.2f} | {s['wrong_version@1']:.2f} |")
-    out += ["", "## 질문별 정답 순위", "", "`-`는 10위 안에 정답이 없음을 뜻합니다. `*`는 1위가 내용이 다른 잘못된 판본, "
-            "`=`는 1위가 내용은 같지만 판본이 다른 문서임을 뜻합니다.", "",
-            "| 질문 | 정답 판본 | " + " | ".join(names) + " |",
-            "| --- | --- | " + " | ".join("---" for _ in names) + " |"]
+        out.append(
+            f"| {name} | {s['hit@1']:.2f} | {s['hit@3']:.2f} | {s['mrr@10']:.2f} | {s['wrong_version@1']:.2f} |"
+        )
+    out += [
+        "",
+        "## 질문별 정답 순위",
+        "",
+        "`-`는 10위 안에 정답이 없음을 뜻합니다. `*`는 1위가 내용이 다른 잘못된 판본, "
+        "`=`는 1위가 내용은 같지만 판본이 다른 문서임을 뜻합니다.",
+        "",
+        "| 질문 | 정답 판본 | " + " | ".join(names) + " |",
+        "| --- | --- | " + " | ".join("---" for _ in names) + " |",
+    ]
     for r in rows:
         cells = []
         for name in names:
             m = r["methods"][name]
-            mark = ("=" if m["top1_identical_text"] else "*") if m["top1_wrong_version"] else ""
+            mark = (
+                ("=" if m["top1_identical_text"] else "*")
+                if m["top1_wrong_version"]
+                else ""
+            )
             cells.append((str(m["rank"]) if m["rank"] else "-") + mark)
         out.append(f"| {r['id']} | {r['gold_snapshot']} | " + " | ".join(cells) + " |")
     out += ["", "## 질문", ""]
@@ -117,10 +174,24 @@ def main() -> None:
     rows = evaluate(questions, chunks, methods)
     summary = summarize(rows, list(methods))
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "results.json").write_text(json.dumps(
-        {"target": TARGET, "model": MODEL, "top_k": TOP_K, "summary": summary, "questions": rows},
-        ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (OUT / "report.md").write_text(render(rows, summary, list(methods)), encoding="utf-8")
+    (OUT / "results.json").write_text(
+        json.dumps(
+            {
+                "target": TARGET,
+                "model": MODEL,
+                "top_k": TOP_K,
+                "summary": summary,
+                "questions": rows,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (OUT / "report.md").write_text(
+        render(rows, summary, list(methods)), encoding="utf-8"
+    )
     for name, s in summary.items():
         print(f"{name:18} " + "  ".join(f"{k}={v:.2f}" for k, v in s.items()))
 

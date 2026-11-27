@@ -21,13 +21,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=True)
     a = sub.add_parser("audit", help="업그레이드 영향 분석")
-    a.add_argument("--from", dest="current", required=True, help="현재 Flutter 버전 (예: 3.24.5)")
-    a.add_argument("--to", dest="target", required=True, help="목표 Flutter 버전 (예: 3.27.1)")
+    a.add_argument(
+        "--from", dest="current", required=True, help="현재 Flutter 버전 (예: 3.24.5)"
+    )
+    a.add_argument(
+        "--to", dest="target", required=True, help="목표 Flutter 버전 (예: 3.27.1)"
+    )
     a.add_argument("--input", type=Path, help="설정·코드 조각이 들어 있는 디렉터리")
-    a.add_argument("files", nargs="*", type=Path,
-                   help="build.gradle(.kts), AndroidManifest.xml, res/values*/styles.xml, *.dart")
-    a.add_argument("--retriever", choices=RETRIEVERS, default=DEFAULT,
-                   help=f"근거 후보를 찾는 검색 방식 (기본값: {DEFAULT})")
+    a.add_argument(
+        "files",
+        nargs="*",
+        type=Path,
+        help="build.gradle(.kts), AndroidManifest.xml, res/values*/styles.xml, *.dart",
+    )
+    a.add_argument(
+        "--retriever",
+        choices=RETRIEVERS,
+        default=DEFAULT,
+        help=f"근거 후보를 찾는 검색 방식 (기본값: {DEFAULT})",
+    )
     a.add_argument("--json", action="store_true", help="JSON으로 출력")
     sub.add_parser("index", help="임베딩 인덱스를 미리 만듭니다")
     return p
@@ -41,7 +53,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"임베딩 인덱스 준비 완료: {retriever.path}")  # type: ignore[attr-defined]
             return 0
         if bool(args.input) == bool(args.files):
-            print("--input 디렉터리와 파일 목록 중 하나만 넣어 주세요.", file=sys.stderr)
+            print(
+                "--input 디렉터리와 파일 목록 중 하나만 넣어 주세요.", file=sys.stderr
+            )
             return 2
         # Reject unsupported versions before loading (or building) an index.
         check_range(args.current, args.target)

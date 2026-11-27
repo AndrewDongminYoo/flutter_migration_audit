@@ -16,8 +16,11 @@ EDGE_DOC = "release/breaking-changes/default-systemuimode-edge-to-edge.md"
 
 
 def chunk(index, snapshot, heading):
-    return next(c for c in index.chunks
-                if c.doc_id == f"{snapshot}:{EDGE_DOC}" and c.heading == heading)
+    return next(
+        c
+        for c in index.chunks
+        if c.doc_id == f"{snapshot}:{EDGE_DOC}" and c.heading == heading
+    )
 
 
 @pytest.mark.parametrize("key", ["opt_out_works", "target_default", "already_migrated"])
@@ -34,7 +37,9 @@ def test_unfiltered_search_ranks_a_wrong_version_first(index, key):
 
 def test_wrong_revision_of_opt_out_text_is_rejected(index):
     latest = chunk(index, LATEST, "Migration guide")
-    assert "This modified style opts your app out" in latest.normalized  # same sentence...
+    assert (
+        "This modified style opts your app out" in latest.normalized
+    )  # same sentence...
     with pytest.raises(VersionMismatch):
         accept(latest, E["opt_out_works"], TARGET)  # ...wrong version
 
@@ -71,15 +76,23 @@ def test_later_correction_is_explicit_and_labelled(index):
     assert ev.snapshot_id == LATEST and ev.later_correction
     assert "목표 버전 이후" in ev.source_label()
     # The 3.27 revision has no such instruction, which is why it is a correction.
-    target_text = " ".join(c.normalized for c in index.chunks if c.doc_id == f"flutter-3.27:{EDGE_DOC}")
+    target_text = " ".join(
+        c.normalized for c in index.chunks if c.doc_id == f"flutter-3.27:{EDGE_DOC}"
+    )
     assert "night mode" not in target_text
 
 
 def test_api_doc_revision_differs_by_version(index):
     def section(snapshot):
-        return next(c for c in index.chunks
-                    if c.doc_id == f"{snapshot}:api/services/SystemUiMode.md"
-                    and c.heading == "SystemUiMode.immersiveSticky").normalized
+        return next(
+            c
+            for c in index.chunks
+            if c.doc_id == f"{snapshot}:api/services/SystemUiMode.md"
+            and c.heading == "SystemUiMode.immersiveSticky"
+        ).normalized
+
     assert "API 35" not in section("flutter-3.24")
-    assert "API 35" in section("flutter-3.27") and "API 36" not in section("flutter-3.27")
+    assert "API 35" in section("flutter-3.27") and "API 36" not in section(
+        "flutter-3.27"
+    )
     assert "API 36" in section(LATEST)

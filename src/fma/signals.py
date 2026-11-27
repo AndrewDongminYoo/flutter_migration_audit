@@ -82,26 +82,56 @@ def implicit_parent(style: Style) -> str | None:
 # this order.
 # https://developer.android.com/guide/topics/resources/providing-resources#BestMatch
 QUALIFIER_KINDS: list[tuple[str, re.Pattern]] = [
-    (kind, re.compile(pattern)) for kind, pattern in [
-        ("mcc", r"mcc\d+"), ("mnc", r"mnc\d+"),
+    (kind, re.compile(pattern))
+    for kind, pattern in [
+        ("mcc", r"mcc\d+"),
+        ("mnc", r"mnc\d+"),
         ("layoutdir", r"ldrtl|ldltr"),
-        ("sw", r"sw\d+dp"), ("w", r"w\d+dp"), ("h", r"h\d+dp"),
-        ("size", r"small|normal|large|xlarge"), ("long", r"long|notlong"),
-        ("round", r"round|notround"), ("gamut", r"widecg|nowidecg"), ("hdr", r"highdr|lowdr"),
+        ("sw", r"sw\d+dp"),
+        ("w", r"w\d+dp"),
+        ("h", r"h\d+dp"),
+        ("size", r"small|normal|large|xlarge"),
+        ("long", r"long|notlong"),
+        ("round", r"round|notround"),
+        ("gamut", r"widecg|nowidecg"),
+        ("hdr", r"highdr|lowdr"),
         ("orientation", r"port|land"),
         ("uimode", r"car|desk|television|appliance|watch|vrheadset"),
         ("night", r"night|notnight"),
         ("density", r"ldpi|mdpi|hdpi|xhdpi|xxhdpi|xxxhdpi|nodpi|tvdpi|anydpi|\d+dpi"),
-        ("touch", r"notouch|finger"), ("keys", r"keysexposed|keyshidden|keyssoft"),
-        ("input", r"nokeys|qwerty|12key"), ("navexp", r"navexposed|navhidden"),
+        ("touch", r"notouch|finger"),
+        ("keys", r"keysexposed|keyshidden|keyssoft"),
+        ("input", r"nokeys|qwerty|12key"),
+        ("navexp", r"navexposed|navhidden"),
         ("nav", r"nonav|dpad|trackball|wheel"),
         ("version", r"v\d+"),
         ("locale", r"[a-z]{2,3}|r[A-Z]{2}|b\+[\w+]+"),
     ]
 ]
-PRECEDENCE = ["mcc", "mnc", "locale", "layoutdir", "sw", "w", "h", "size", "long", "round",
-              "gamut", "hdr", "orientation", "uimode", "night", "density", "touch", "keys",
-              "input", "navexp", "nav", "version"]
+PRECEDENCE = [
+    "mcc",
+    "mnc",
+    "locale",
+    "layoutdir",
+    "sw",
+    "w",
+    "h",
+    "size",
+    "long",
+    "round",
+    "gamut",
+    "hdr",
+    "orientation",
+    "uimode",
+    "night",
+    "density",
+    "touch",
+    "keys",
+    "input",
+    "navexp",
+    "nav",
+    "version",
+]
 # The audit looks at Android 15 devices, so every configuration it resolves
 # runs API 35. Directories for later versions (values-v36) never apply.
 DEVICE_API = 35
@@ -176,7 +206,11 @@ def config_name(config: dict) -> str:
     """Render a device configuration as a resource directory name (version omitted)."""
     tokens = []
     for kind in PRECEDENCE:
-        if kind == "version" or kind not in config or (kind == "night" and config[kind] == "notnight"):
+        if (
+            kind == "version"
+            or kind not in config
+            or (kind == "night" and config[kind] == "notnight")
+        ):
             continue
         value = config[kind]
         tokens.append(f"{kind}{value}dp" if kind in ("sw", "w", "h") else str(value))
@@ -192,7 +226,9 @@ def _matches(directory: dict, config: dict) -> bool:
                 return False
         elif kind == "locale":
             want = config.get("locale")
-            if not isinstance(want, str) or not (want == value or want.split("-")[0] == value):
+            if not isinstance(want, str) or not (
+                want == value or want.split("-")[0] == value
+            ):
                 return False
         elif config.get(kind) != value:
             return False
@@ -211,13 +247,17 @@ def best_match(qualifiers: set[str], config: dict) -> str | None:
             top = max(d[kind] for _, d in with_kind)
             with_kind = [(q, d) for q, d in with_kind if d[kind] == top]
         elif kind == "locale":
-            exact = [(q, d) for q, d in with_kind if d["locale"] == config.get("locale")]
+            exact = [
+                (q, d) for q, d in with_kind if d["locale"] == config.get("locale")
+            ]
             with_kind = exact or with_kind
         candidates = with_kind
     return candidates[0][0] if candidates else None
 
 
-def resolve_opt_out(styles: list[Style], name: str, qualifier: str | dict) -> OptOutResolution | None:
+def resolve_opt_out(
+    styles: list[Style], name: str, qualifier: str | dict
+) -> OptOutResolution | None:
     """Follow the style's parents until one sets the opt-out item.
 
     `qualifier` names the device configuration to resolve for, such as
@@ -241,13 +281,22 @@ def resolve_opt_out(styles: list[Style], name: str, qualifier: str | dict) -> Op
         if style is None:
             if not chain:
                 return None
-            return OptOutResolution(None, None, None, chain, missing_parent=current, styles=resolved)
+            return OptOutResolution(
+                None, None, None, chain, missing_parent=current, styles=resolved
+            )
         chain.append(current)
         resolved.append(style)
         if style.opt_out is not None:
-            return OptOutResolution(style.opt_out_value, style.opt_out, style.name, chain,
-                                    unresolved_value=None if style.opt_out_value is not None else style.opt_out_raw,
-                                    styles=resolved)
+            return OptOutResolution(
+                style.opt_out_value,
+                style.opt_out,
+                style.name,
+                chain,
+                unresolved_value=(
+                    None if style.opt_out_value is not None else style.opt_out_raw
+                ),
+                styles=resolved,
+            )
         current = implicit_parent(style)
     return OptOutResolution(None, None, None, chain, styles=resolved)
 
@@ -304,7 +353,10 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
     m = NORMAL_THEME.search(text)
     if m:
         line = text.count("\n", 0, m.start(1)) + 1
-        inputs.normal_theme = (m.group(1), Clue(name, line, text.splitlines()[line - 1]))
+        inputs.normal_theme = (
+            m.group(1),
+            Clue(name, line, text.splitlines()[line - 1]),
+        )
 
 
 # --- res/values*/styles.xml -----------------------------------------------
@@ -335,8 +387,14 @@ def _parse_styles_xml(text: str) -> list[dict] | None:
     def start(tag, attrs):
         nonlocal item
         if tag == "style" and "name" in attrs:
-            stack.append({"name": attrs["name"], "parent": attrs.get("parent"),
-                          "line": parser.CurrentLineNumber, "item": None})
+            stack.append(
+                {
+                    "name": attrs["name"],
+                    "parent": attrs.get("parent"),
+                    "line": parser.CurrentLineNumber,
+                    "item": None,
+                }
+            )
         elif tag == "item" and stack and attrs.get("name") == OPT_OUT_ATTR:
             item = {"line": parser.CurrentLineNumber, "text": ""}
 
@@ -352,7 +410,11 @@ def _parse_styles_xml(text: str) -> list[dict] | None:
         elif tag == "style" and stack:
             found.append(stack.pop())
 
-    parser.StartElementHandler, parser.CharacterDataHandler, parser.EndElementHandler = start, data, end
+    (
+        parser.StartElementHandler,
+        parser.CharacterDataHandler,
+        parser.EndElementHandler,
+    ) = (start, data, end)
     try:
         parser.Parse(f"<fma-root>{body}</fma-root>", True)
     except xml.parsers.expat.ExpatError:
@@ -365,20 +427,31 @@ def _scan_styles_regex(text: str) -> list[dict]:
     body = XML_COMMENT.sub(_blank, text)
     found = []
     for m in STYLE_TAG.finditer(body):
-        attrs = {a.group(1): a.group(2) if a.group(2) is not None else a.group(3)
-                 for a in ATTR.finditer(m.group(1))}
+        attrs = {
+            a.group(1): a.group(2) if a.group(2) is not None else a.group(3)
+            for a in ATTR.finditer(m.group(1))
+        }
         if "name" not in attrs:
             continue
-        style = {"name": attrs["name"], "parent": attrs.get("parent"),
-                 "line": body.count("\n", 0, m.start()) + 1, "item": None}
+        style = {
+            "name": attrs["name"],
+            "parent": attrs.get("parent"),
+            "line": body.count("\n", 0, m.start()) + 1,
+            "item": None,
+        }
         if not m.group(2):  # not self-closing
             close = STYLE_END.search(body, m.end())
             inner_end = close.start() if close else len(body)
             for it in ITEM.finditer(body, m.end(), inner_end):
-                it_attrs = {a.group(1): a.group(2) if a.group(2) is not None else a.group(3)
-                            for a in ATTR.finditer(it.group(1))}
+                it_attrs = {
+                    a.group(1): a.group(2) if a.group(2) is not None else a.group(3)
+                    for a in ATTR.finditer(it.group(1))
+                }
                 if it_attrs.get("name") == OPT_OUT_ATTR:
-                    style["item"] = {"line": body.count("\n", 0, it.start()) + 1, "text": it.group(2)}
+                    style["item"] = {
+                        "line": body.count("\n", 0, it.start()) + 1,
+                        "text": it.group(2),
+                    }
                     break
         found.append(style)
     return found
@@ -397,8 +470,15 @@ def read_styles(text: str, name: str, qualifier: str, inputs: AppInputs) -> None
             opt_clue = Clue(name, st["item"]["line"], lines[st["item"]["line"] - 1])
             opt_raw, opt_value = raw, {"true": True, "false": False}.get(raw)
         inputs.styles.append(
-            Style(st["name"], qualifier, opt_clue, Clue(name, st["line"], lines[st["line"] - 1]),
-                  opt_out_value=opt_value, opt_out_raw=opt_raw, parent=st["parent"])
+            Style(
+                st["name"],
+                qualifier,
+                opt_clue,
+                Clue(name, st["line"], lines[st["line"] - 1]),
+                opt_out_value=opt_value,
+                opt_out_raw=opt_raw,
+                parent=st["parent"],
+            )
         )
 
 
@@ -426,6 +506,7 @@ def read_dart(text: str, name: str, inputs: AppInputs) -> None:
 
 # --- Discovery ------------------------------------------------------------
 
+
 def read_paths(paths: list[Path], root: Path | None = None) -> AppInputs:
     """Read known file types. `root` only shortens names in the report."""
     inputs = AppInputs()
@@ -438,7 +519,9 @@ def read_paths(paths: list[Path], root: Path | None = None) -> AppInputs:
             read_manifest(text, name, inputs)
         elif path.name == "styles.xml":
             parent = path.parent.name
-            read_styles(text, name, parent if parent.startswith("values") else "values", inputs)
+            read_styles(
+                text, name, parent if parent.startswith("values") else "values", inputs
+            )
         elif path.suffix == ".dart":
             read_dart(text, name, inputs)
         else:
@@ -450,12 +533,17 @@ def read_paths(paths: list[Path], root: Path | None = None) -> AppInputs:
 def discover(root: Path) -> AppInputs:
     """Find inputs in a directory laid out like a Flutter project (or a subset)."""
     wanted = [
-        p for p in root.rglob("*")
-        if p.is_file() and (
+        p
+        for p in root.rglob("*")
+        if p.is_file()
+        and (
             p.name in ("AndroidManifest.xml", "styles.xml")
             or p.suffix == ".dart"
             # Only the app module sets targetSdk; skip the root build file.
-            or (p.name in ("build.gradle", "build.gradle.kts") and p.parent.name == "app")
+            or (
+                p.name in ("build.gradle", "build.gradle.kts")
+                and p.parent.name == "app"
+            )
         )
     ]
     return read_paths(wanted, root)

@@ -7,20 +7,37 @@ import pytest
 from fma import rules
 from fma.cli import main
 from fma.rules import AFFECTED, NEEDS_CHECK, NOT_AFFECTED, audit
-from fma.signals import AppInputs, discover, read_dart, read_gradle, read_manifest, read_styles
+from fma.signals import (
+    AppInputs,
+    discover,
+    read_dart,
+    read_gradle,
+    read_manifest,
+    read_styles,
+)
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples"
-MANIFEST = (SAMPLES / "player_default/android/app/src/main/AndroidManifest.xml").read_text()
+MANIFEST = (
+    SAMPLES / "player_default/android/app/src/main/AndroidManifest.xml"
+).read_text()
 STYLES_PLAIN = '<style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">\n</style>\n'
-STYLES_OPT_OUT = ('<style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">\n'
-                  '  <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>\n</style>\n')
+STYLES_OPT_OUT = (
+    '<style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">\n'
+    '  <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>\n</style>\n'
+)
 
 
 def verdicts(report):
     return {f.key: f.verdict for f in report.findings}
 
 
-def make(gradle="targetSdk = flutter.targetSdkVersion", styles=STYLES_PLAIN, night=None, dart=None, manifest=MANIFEST):
+def make(
+    gradle="targetSdk = flutter.targetSdkVersion",
+    styles=STYLES_PLAIN,
+    night=None,
+    dart=None,
+    manifest=MANIFEST,
+):
     inputs = AppInputs()
     if gradle is not None:
         read_gradle(gradle, "build.gradle", inputs)
@@ -40,6 +57,7 @@ def run(index, inputs):
 
 
 # --- the two public samples: same code, different settings ----------------
+
 
 def test_samples_differ_only_in_opt_out_setting():
     a, b = SAMPLES / "player_default", SAMPLES / "player_opt_out"
@@ -78,6 +96,7 @@ def test_every_judgement_has_clue_evidence_and_test(index, sample):
 
 # --- targetSdk branches ----------------------------------------------------
 
+
 def test_explicit_target_below_35_stops_early(index):
     report = run(index, make(gradle="targetSdk = 34"))
     assert verdicts(report) == {"target_sdk": NOT_AFFECTED}
@@ -85,7 +104,9 @@ def test_explicit_target_below_35_stops_early(index):
 
 
 def test_explicit_target_35_is_not_caused_by_upgrade(index):
-    assert verdicts(run(index, make(gradle="targetSdk = 35"))) == {"target_sdk": NOT_AFFECTED}
+    assert verdicts(run(index, make(gradle="targetSdk = 35"))) == {
+        "target_sdk": NOT_AFFECTED
+    }
 
 
 def test_target_36_is_outside_this_range(index):
@@ -95,7 +116,9 @@ def test_target_36_is_outside_this_range(index):
 
 
 def test_unknown_target_makes_everything_conditional(index):
-    report = run(index, make(gradle="targetSdk = rootProject.ext.target", dart="Scaffold(\n"))
+    report = run(
+        index, make(gradle="targetSdk = rootProject.ext.target", dart="Scaffold(\n")
+    )
     assert set(verdicts(report).values()) == {NEEDS_CHECK}
     layout = next(f for f in report.findings if f.key == "layout")
     assert layout.reason.startswith("targetSdk가 35가 된다면")
@@ -111,11 +134,15 @@ def test_missing_gradle_asks_for_it(index):
 
 # --- opt-out branches ------------------------------------------------------
 
+
 def test_night_style_without_opt_out_cites_later_correction(index):
     report = run(index, make(styles=STYLES_OPT_OUT, night=STYLES_PLAIN))
     v = verdicts(report)
-    assert {k: v[k] for k in ("target_sdk", "opt_out", "opt_out_night")} == \
-        {"target_sdk": AFFECTED, "opt_out": NOT_AFFECTED, "opt_out_night": NEEDS_CHECK}
+    assert {k: v[k] for k in ("target_sdk", "opt_out", "opt_out_night")} == {
+        "target_sdk": AFFECTED,
+        "opt_out": NOT_AFFECTED,
+        "opt_out_night": NEEDS_CHECK,
+    }
     # Night mode may lose the opt-out, so the edge-to-edge checks still run.
     assert "ui_mode" in v and "layout" in v
     night = next(f for f in report.findings if f.key == "opt_out_night")
@@ -130,6 +157,7 @@ def test_manifest_theme_missing_from_styles(index):
 
 # --- code branches ---------------------------------------------------------
 
+
 def test_already_migrated_app(index):
     dart = "SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);\nreturn Scaffold(\n"
     report = run(index, make(dart=dart))
@@ -138,8 +166,18 @@ def test_already_migrated_app(index):
 
 
 def test_safe_area_and_app_bar(index):
-    assert verdicts(run(index, make(dart="Scaffold(body: SafeArea(child: x))\n")))["layout"] == NOT_AFFECTED
-    assert verdicts(run(index, make(dart="Scaffold(appBar: AppBar(), body: x)\n")))["layout"] == NEEDS_CHECK
+    assert (
+        verdicts(run(index, make(dart="Scaffold(body: SafeArea(child: x))\n")))[
+            "layout"
+        ]
+        == NOT_AFFECTED
+    )
+    assert (
+        verdicts(run(index, make(dart="Scaffold(appBar: AppBar(), body: x)\n")))[
+            "layout"
+        ]
+        == NEEDS_CHECK
+    )
 
 
 def test_no_ui_mode_call_needs_check(index):
@@ -154,7 +192,9 @@ def test_overlay_colors_stop_without_evidence(index):
 
 
 def test_missing_evidence_downgrades_verdict(index, monkeypatch):
-    broken = replace(rules.E["edge_default"], must_contain="this sentence is not in any doc")
+    broken = replace(
+        rules.E["edge_default"], must_contain="this sentence is not in any doc"
+    )
     monkeypatch.setitem(rules.E, "edge_default", broken)
     report = run(index, make())
     f = next(f for f in report.findings if f.key == "opt_out")
@@ -163,18 +203,60 @@ def test_missing_evidence_downgrades_verdict(index, monkeypatch):
 
 # --- CLI -------------------------------------------------------------------
 
+
 def test_cli_json(index, capsys):
     # bm25 keeps this test independent of the embedding index.
-    assert main(["audit", "--from", "3.24.5", "--to", "3.27.1", "--input", str(SAMPLES / "player_opt_out"),
-                 "--retriever", "bm25", "--json"]) == 0
+    assert (
+        main(
+            [
+                "audit",
+                "--from",
+                "3.24.5",
+                "--to",
+                "3.27.1",
+                "--input",
+                str(SAMPLES / "player_opt_out"),
+                "--retriever",
+                "bm25",
+                "--json",
+            ]
+        )
+        == 0
+    )
     data = json.loads(capsys.readouterr().out)
     assert [f["verdict_label"] for f in data["findings"]] == ["영향 있음", "영향 없음"]
 
 
 def test_cli_rejects_unsupported_range(index, capsys):
-    assert main(["audit", "--from", "3.27.0", "--to", "3.29.0", "--input", str(SAMPLES / "player_default")]) == 2
+    assert (
+        main(
+            [
+                "audit",
+                "--from",
+                "3.27.0",
+                "--to",
+                "3.29.0",
+                "--input",
+                str(SAMPLES / "player_default"),
+            ]
+        )
+        == 2
+    )
     assert "스냅샷이 없습니다" in capsys.readouterr().err
-    assert main(["audit", "--from", "3.24.0", "--to", "3.24.5", "--input", str(SAMPLES / "player_default")]) == 2
+    assert (
+        main(
+            [
+                "audit",
+                "--from",
+                "3.24.0",
+                "--to",
+                "3.24.5",
+                "--input",
+                str(SAMPLES / "player_default"),
+            ]
+        )
+        == 2
+    )
     assert "3.24.x → 3.27.x" in capsys.readouterr().err
 
 
