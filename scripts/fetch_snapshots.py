@@ -46,6 +46,13 @@ CONTENT_ROOTS = ("sites/docs/src/content/", "src/content/")
 INCLUDE = (
     re.compile(r"^release/breaking-changes/[^/]+\.md$"),
     re.compile(r"^release/release-notes/release-notes-3\.(2[2-9]|[3-9]\d)\.\d+\.md$"),
+    # Android and screen-layout guides: the evidence for system bar questions,
+    # plus Android pages that look similar but are not about system bars.
+    re.compile(r"^deployment/android\.md$"),
+    re.compile(r"^ui/adaptive-responsive/[^/]+\.md$"),
+    re.compile(r"^platform-integration/platform-adaptations\.md$"),
+    re.compile(r"^platform-integration/android/[^/]+\.md$"),
+    re.compile(r"^add-to-app/android/[^/]+\.md$"),
 )
 
 FOOTER_LANDED = re.compile(r"Landed in version:\s*([^\s<]+)")
@@ -66,12 +73,16 @@ def git(*args: str) -> str:
 def ensure_clone() -> None:
     if CLONE.exists():
         subprocess.run(["git", "-C", str(CLONE), "fetch", "-q", "origin", "main:main"], check=True)
-        return
-    RAW.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["git", "clone", "-q", "--bare", "--filter=blob:none", WEBSITE_REPO, str(CLONE)],
-        check=True,
-    )
+    else:
+        RAW.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "clone", "-q", "--bare", "--filter=blob:none", WEBSITE_REPO, str(CLONE)],
+            check=True,
+        )
+    # Fetching blobs by id into a partial clone can leave the commit-graph
+    # pointing at objects that are not local, which then fails later reads.
+    for key in ("core.commitGraph", "fetch.writeCommitGraph", "gc.writeCommitGraph"):
+        subprocess.run(["git", "-C", str(CLONE), "config", key, "false"], check=True)
 
 
 def stable_release_dates() -> dict[str, str]:
@@ -164,9 +175,14 @@ def extract(snapshot_id: str, commit: str) -> list[dict]:
         dest.write_text(text, encoding="utf-8")
 
         slug = Path(rel).stem
-        kind = "breaking-change" if rel.startswith("release/breaking-changes/") else "release-notes"
         if rel == index_rel:
             kind = "breaking-change-index"
+        elif rel.startswith("release/breaking-changes/"):
+            kind = "breaking-change"
+        elif rel.startswith("release/release-notes/"):
+            kind = "release-notes"
+        else:
+            kind = "guide"
         title = TITLE.search(text)
         landed = FOOTER_LANDED.search(text)
         stable = FOOTER_STABLE.search(text)
@@ -175,6 +191,7 @@ def extract(snapshot_id: str, commit: str) -> list[dict]:
             {
                 "doc_id": f"{snapshot_id}:{rel}",
                 "snapshot_id": snapshot_id,
+                "source": "flutter/website",
                 "commit": commit,
                 "commit_date": commit_date,
                 "path": rel,

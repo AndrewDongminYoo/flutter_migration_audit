@@ -6,7 +6,7 @@
     "window_closes": "3.27.0 released 2024-12-11T18:30:13.349963Z",
     "commit": "4e5c7d2f7250fca26acfa99f56135c99e0c6cc99",
     "commit_date": "2024-12-11T09:45:42-08:00",
-    "doc_count": 141
+    "doc_count": 168
   },
   {
     "snapshot_id": "flutter-3.27",
@@ -15,7 +15,7 @@
     "window_closes": "3.29.0 released 2025-02-12T18:10:55.366227Z",
     "commit": "d69db60f9945655fa06fcaac573478ff6088003e",
     "commit_date": "2025-02-11T09:57:03-08:00",
-    "doc_count": 148
+    "doc_count": 175
   },
   {
     "snapshot_id": "latest",
@@ -24,6 +24,6 @@
     "window_closes": null,
     "commit": "a0b75bedb9557c5b71c81d8482a3073c05a0b7f3",
     "commit_date": "2026-11-25T13:45:27-06:00",
-    "doc_count": 200
+    "doc_count": 229
   }
 ]

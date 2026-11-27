@@ -12,4 +12,11 @@ Flutter 업그레이드 구간을 입력하면 공식 마이그레이션 문서�
 
 ## 왜 버전이 중요한가
 
-docs.flutter.dev의 breaking change 문서는 발행 이후에도 계속 수정됩니다. 예를 들어 [Set default of `SystemUiMode` to edge-to-edge](https://docs.flutter.dev/release/breaking-changes/default-systemuimode-edge-to-edge)는 3.27과 함께 나왔지만, 2025년 6월 이후 Android 16 관련 내용이 추가되었습니다. 3.27 시점의 질문에 현재 문서를 그대로 쓰면 그 시점에는 없던 내용이 답에 섞일 수 있습니다. 그래서 이 프로젝트는 [flutter/website](https://github.com/flutter/website) 저장소에서 릴리스 날짜 기준으로 문서 스냅샷을 만들어 검색 코퍼스로 사용합니다.
+docs.flutter.dev의 breaking change 문서는 발행 이후에도 계속 수정됩니다. 예를 들어 [Set default of `SystemUiMode` to edge-to-edge](https://docs.flutter.dev/release/breaking-changes/default-systemuimode-edge-to-edge)는 3.27과 함께 나왔지만, 2025년 6월 이후 Android 16 관련 내용이 추가되었습니다. 3.27 시점의 질문에 현재 문서를 그대로 쓰면 그 시점에는 없던 내용이 답에 섞일 수 있습니다. 그래서 이 프로젝트는 [flutter/website](https://github.com/flutter/website) 저장소에서 릴리스 날짜 기준으로 문서 스냅샷을 만들고, API 문서는 [flutter/flutter](https://github.com/flutter/flutter) 릴리스 태그의 dartdoc 주석에서 다시 만들어 검색 코퍼스로 사용합니다. 자세한 기준은 [docs/corpus.md](docs/corpus.md)에 있습니다.
+
+## 코퍼스 만들기
+
+```sh
+uv run --python 3.12 scripts/fetch_snapshots.py
+uv run --python 3.12 scripts/fetch_api_docs.py
+```
