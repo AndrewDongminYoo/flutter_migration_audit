@@ -40,6 +40,50 @@ uv run fma audit --from 3.24.5 --to 3.27.1 --input samples/player_default --retr
 
 근거 후보는 기본적으로 목표 버전 스냅샷 안에서 임베딩 검색으로 찾습니다. 검색 방식과 관계없이, 후보가 근거로 채택되려면 정해 둔 판본과 정답 문장을 모두 만족해야 합니다. 그래서 검색 방식을 바꿔도 판단 결과는 같고, 달라지는 것은 근거를 찾기까지 살펴보는 후보의 순서입니다.
 
+## 실행 결과 예시
+
+`samples/player_default`를 분석한 결과에서 다섯 항목 중 두 항목을 옮겼습니다. 나머지 항목도 같은 형식으로 나옵니다.
+
+<!-- fma-example:start -->
+```text
+Flutter 3.24.5 → 3.27.1 · Android 시스템 바 / edge-to-edge
+입력: android/app/build.gradle, android/app/src/main/AndroidManifest.xml, android/app/src/main/res/values/styles.xml, android/app/src/main/res/values-night/styles.xml, lib/player_screen.dart
+근거 검색: embedding + 버전 필터
+
+요약: 영향 있음 5 · 추가 확인 필요 0 · 영향 없음 0
+
+[영향 있음] targetSdk 변화
+  targetSdk가 flutter.targetSdkVersion을 따르므로 API 34에서 API 35(Android 15)로 바뀝니다.
+  앱 단서:
+    android/app/build.gradle:14  targetSdk = flutter.targetSdkVersion
+  문서 근거:
+    “Prior to Flutter 3.27, Flutter apps target Android 14 by default and won't opt into edge-to-
+    edge mode automatically, but your app _will_ be impacted when you choose to target Android 15.
+    If your app targets `flutter.targetSdkVersion` (as it does by default), then it targets Android
+    15 starting with Flutter version 3.27, automatically opting your app in to edge-to-edge.”
+      Set default of `SystemUiMode` to edge-to-edge › Context · Flutter 3.27 문서 (flutter/website d69db60f99)
+      https://docs.flutter.dev/release/breaking-changes/default-systemuimode-edge-to-edge
+  직접 테스트:
+    - Android 15(API 35) 에뮬레이터에서 Flutter 3.24 빌드와 Flutter 3.27 빌드의 첫 화면을 열고 상단 상태바·하단 내비게이션 바 주변을
+    비교한다.
+
+[영향 있음] SystemUiMode 사용: immersiveSticky
+  SystemUiMode.immersiveSticky 모드는 targetSdk 35 이상에서 opt-out 없이는 동작하지 않습니다.
+  앱 단서:
+    lib/player_screen.dart:16  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  문서 근거:
+    “Available starting at Android SDK 4.4 (API 19). Earlier versions of Android will not be
+    affected by this setting. However, if your app targets Android SDK 15 (API 35) or later (Flutter
+    does this by default), then you must migrate using the instructions in
+    https://docs.flutter.dev/release/breaking-changes/default-systemuimode-edge-to-edge to use this
+    mode.”
+      SystemUiMode enum › SystemUiMode.immersiveSticky · Flutter 3.27 문서 (flutter/flutter 3.27.0)
+      https://api.flutter.dev/flutter/services/SystemUiMode.html
+  직접 테스트:
+    - Android 15(API 35) 에뮬레이터에서 immersiveSticky 모드를 켜는 화면에 들어가 상태바·내비게이션 바가 문서대로 숨는지 확인한다.
+```
+<!-- fma-example:end -->
+
 ## 샘플: 같은 업그레이드, 다른 결과
 
 `samples/`의 두 앱은 Dart 코드와 Gradle 설정이 같고 `styles.xml`만 다릅니다. 둘 다 동영상 화면에서 `SystemUiMode.immersiveSticky`를 쓰고, `targetSdk`는 `flutter.targetSdkVersion`을 따릅니다.
