@@ -12,7 +12,9 @@ ORDER = {AFFECTED: 0, NEEDS_CHECK: 1, NOT_AFFECTED: 2}
 
 
 def _wrap(text: str, indent: str) -> str:
-    return textwrap.fill(text, width=100, initial_indent=indent, subsequent_indent=indent)
+    return textwrap.fill(
+        text, width=100, initial_indent=indent, subsequent_indent=indent
+    )
 
 
 def to_text(report: Report) -> str:

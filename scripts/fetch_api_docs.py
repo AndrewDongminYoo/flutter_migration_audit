@@ -62,8 +62,12 @@ MEMBER_ACCESSOR = re.compile(r"\b[gs]et\s+(\w+)")
 # match handles `static const X light = X(...)`.
 MEMBER_NAME = re.compile(r"(\w+)\s*(?:\(|[;=,]|$)")
 # Dartdoc directives that carry no prose of their own.
-DIRECTIVE = re.compile(r"\{@(?:tool|end-tool|youtube|animation|dartpad|template|endtemplate)[^}]*\}")
-TEMPLATE = re.compile(r"\{@template\s+([\w.\-]+)\}[ \t]*\n?(.*?)\{@endtemplate\}", re.DOTALL)
+DIRECTIVE = re.compile(
+    r"\{@(?:tool|end-tool|youtube|animation|dartpad|template|endtemplate)[^}]*\}"
+)
+TEMPLATE = re.compile(
+    r"\{@template\s+([\w.\-]+)\}[ \t]*\n?(.*?)\{@endtemplate\}", re.DOTALL
+)
 MACRO = re.compile(r"\{@macro\s+([\w.\-]+)\}")
 MAX_MACRO_DEPTH = 5
 # Headings inside a doc comment are pushed below the member headings.
@@ -71,8 +75,9 @@ DOC_HEADING = re.compile(r"^(#{1,4}) ", re.MULTILINE)
 
 
 def git(*args: str) -> str:
-    return subprocess.run(["git", "-C", str(CLONE), *args], check=True,
-                          capture_output=True, text=True).stdout
+    return subprocess.run(
+        ["git", "-C", str(CLONE), *args], check=True, capture_output=True, text=True
+    ).stdout
 
 
 def ensure_tags(tags: list[str]) -> None:
@@ -86,20 +91,59 @@ def ensure_tags(tags: list[str]) -> None:
         git("config", "remote.origin.partialclonefilter", "blob:none")
         git("config", "core.commitGraph", "false")
     for tag in tags:
-        if subprocess.run(["git", "-C", str(CLONE), "rev-parse", "-q", "--verify", f"refs/tags/{tag}"],
-                          capture_output=True).returncode != 0:
-            git("fetch", "-q", "--depth", "1", "--filter=blob:none", "origin",
-                f"refs/tags/{tag}:refs/tags/{tag}")
+        if (
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(CLONE),
+                    "rev-parse",
+                    "-q",
+                    "--verify",
+                    f"refs/tags/{tag}",
+                ],
+                capture_output=True,
+            ).returncode
+            != 0
+        ):
+            git(
+                "fetch",
+                "-q",
+                "--depth",
+                "1",
+                "--filter=blob:none",
+                "origin",
+                f"refs/tags/{tag}:refs/tags/{tag}",
+            )
 
 
 def read_tree(tag: str, root: str) -> dict[str, str]:
     """Return {path: text} for Dart files under `root`, fetching blobs in batches."""
-    entries = [line.split("\t", 1) for line in git("ls-tree", "-r", tag, "--", root).splitlines()]
-    entries = [(meta.split()[2], path) for meta, path in entries if path.endswith(".dart")]
+    entries = [
+        line.split("\t", 1)
+        for line in git("ls-tree", "-r", tag, "--", root).splitlines()
+    ]
+    entries = [
+        (meta.split()[2], path) for meta, path in entries if path.endswith(".dart")
+    ]
     oids = [oid for oid, _ in entries]
     for i in range(0, len(oids), 300):
-        subprocess.run(["git", "-C", str(CLONE), "-c", "fetch.negotiationAlgorithm=noop", "fetch", "-q",
-                        "origin", "--no-tags", "--no-write-fetch-head", *oids[i:i + 300]], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(CLONE),
+                "-c",
+                "fetch.negotiationAlgorithm=noop",
+                "fetch",
+                "-q",
+                "origin",
+                "--no-tags",
+                "--no-write-fetch-head",
+                *oids[i : i + 300],
+            ],
+            check=True,
+        )
     return {path: git("cat-file", "blob", oid) for oid, path in entries}
 
 
@@ -124,7 +168,9 @@ def collect_templates(files: dict[str, str]) -> dict[str, str]:
     return templates
 
 
-def expand_macros(text: str, templates: dict[str, str], unresolved: set[str], depth: int = 0) -> str:
+def expand_macros(
+    text: str, templates: dict[str, str], unresolved: set[str], depth: int = 0
+) -> str:
     def replace(m: re.Match) -> str:
         name = m.group(1)
         if name not in templates or depth >= MAX_MACRO_DEPTH:
@@ -148,11 +194,16 @@ def member_name(decl: str) -> str | None:
     return m.group(1) if m else None
 
 
-def clean(lines: list[str], templates: dict[str, str] | None = None,
-          unresolved: set[str] | None = None) -> str:
-    text = "\n".join(l[3:].removeprefix(" ") for l in lines)
+def clean(
+    lines: list[str],
+    templates: dict[str, str] | None = None,
+    unresolved: set[str] | None = None,
+) -> str:
+    text = "\n".join(line[3:].removeprefix(" ") for line in lines)
     if templates is not None:
-        text = expand_macros(text, templates, unresolved if unresolved is not None else set())
+        text = expand_macros(
+            text, templates, unresolved if unresolved is not None else set()
+        )
     text = DOC_HEADING.sub(r"##\1 ", text)
     return DIRECTIVE.sub("", text).strip()
 
@@ -176,25 +227,41 @@ def parse(source: str, templates: dict[str, str] | None = None) -> list[dict]:
         if indent == 0:
             m = TOP_DECL.match(stripped)
             if m and not m.group(2).startswith("_"):
-                current = {"name": m.group(2), "kind": m.group(1).split()[0], "members": [],
-                           "unresolved": set()}
+                current = {
+                    "name": m.group(2),
+                    "kind": m.group(1).split()[0],
+                    "members": [],
+                    "unresolved": set(),
+                }
                 current["doc"] = clean(pending, templates, current["unresolved"])
                 decls.append(current)
-            elif m or stripped.startswith(("typedef", "const", "final")) or "(" in stripped:
+            elif (
+                m
+                or stripped.startswith(("typedef", "const", "final"))
+                or "(" in stripped
+            ):
                 current = None
             pending = []
             continue
         if current is not None and pending and indent == 2:
             name = member_name(stripped)
             if name and not name.startswith("_"):
-                current["members"].append((name, clean(pending, templates, current["unresolved"])))
+                current["members"].append(
+                    (name, clean(pending, templates, current["unresolved"]))
+                )
         pending = []
     return [d for d in decls if d["doc"] or d["members"]]
 
 
 def render(decl: dict, library: str, tag: str, path: str) -> str:
-    out = [f"# {decl['name']} ({decl['kind']}, {library} library)", "",
-           f"Source: flutter/flutter@{tag} {path}", "", decl["doc"], ""]
+    out = [
+        f"# {decl['name']} ({decl['kind']}, {library} library)",
+        "",
+        f"Source: flutter/flutter@{tag} {path}",
+        "",
+        decl["doc"],
+        "",
+    ]
     for name, doc in decl["members"]:
         out += [f"## {decl['name']}.{name}", "", doc, ""]
     return "\n".join(out).rstrip() + "\n"
@@ -235,8 +302,10 @@ def main() -> None:
                     }
                 )
                 count += 1
-        print(f"{snap_id:14} {tag:8} {count} API docs, {len(templates)} templates, "
-              f"{len(unresolved_total)} unresolved macros")
+        print(
+            f"{snap_id:14} {tag:8} {count} API docs, {len(templates)} templates, "
+            f"{len(unresolved_total)} unresolved macros"
+        )
 
     MANIFEST.mkdir(parents=True, exist_ok=True)
     with (MANIFEST / "api_docs.jsonl").open("w", encoding="utf-8") as f:

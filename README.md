@@ -45,6 +45,7 @@ uv run fma audit --from 3.24.5 --to 3.27.1 --input samples/player_default --retr
 `samples/player_default`를 분석한 결과에서 다섯 항목 중 두 항목을 옮겼습니다. 나머지 항목도 같은 형식으로 나옵니다.
 
 <!-- fma-example:start -->
+
 ```text
 Flutter 3.24.5 → 3.27.1 · Android 시스템 바 / edge-to-edge
 입력: android/app/build.gradle, android/app/src/main/AndroidManifest.xml, android/app/src/main/res/values/styles.xml, android/app/src/main/res/values-night/styles.xml, lib/player_screen.dart
@@ -82,18 +83,19 @@ Flutter 3.24.5 → 3.27.1 · Android 시스템 바 / edge-to-edge
   직접 테스트:
     - Android 15(API 35) 에뮬레이터에서 immersiveSticky 모드를 켜는 화면에 들어가 상태바·내비게이션 바가 문서대로 숨는지 확인한다.
 ```
+
 <!-- fma-example:end -->
 
 ## 샘플: 같은 업그레이드, 다른 결과
 
 `samples/`의 두 앱은 Dart 코드와 Gradle 설정이 같고 `styles.xml`만 다릅니다. 둘 다 동영상 화면에서 `SystemUiMode.immersiveSticky`를 쓰고, `targetSdk`는 `flutter.targetSdkVersion`을 따릅니다.
 
-| 항목 | `player_default` | `player_opt_out` |
-| --- | --- | --- |
-| targetSdk 변화 (34 → 35) | 영향 있음 | 영향 있음 |
-| edge-to-edge opt-out | 영향 있음 (항목 없음) | 영향 없음 (항목 있음, 임시 조치) |
-| `immersiveSticky`, `manual` 모드 | 영향 있음 | 해당 없음 |
-| 시스템 바 영역 레이아웃 | 영향 있음 (SafeArea 없음) | 해당 없음 |
+| 항목                             | `player_default`          | `player_opt_out`                 |
+| -------------------------------- | ------------------------- | -------------------------------- |
+| targetSdk 변화 (34 → 35)         | 영향 있음                 | 영향 있음                        |
+| edge-to-edge opt-out             | 영향 있음 (항목 없음)     | 영향 없음 (항목 있음, 임시 조치) |
+| `immersiveSticky`, `manual` 모드 | 영향 있음                 | 해당 없음                        |
+| 시스템 바 영역 레이아웃          | 영향 있음 (SafeArea 없음) | 해당 없음                        |
 
 `player_opt_out`은 opt-out이 적용되므로 그 뒤 항목은 확인하지 않습니다. 대신 문서가 이 방법을 임시 조치로 안내한다는 근거를 함께 보여 줍니다.
 
@@ -101,11 +103,11 @@ Flutter 3.24.5 → 3.27.1 · Android 시스템 바 / edge-to-edge
 
 edge-to-edge 마이그레이션 문서는 코퍼스에 세 가지 판본이 있습니다. 3.27 출시 전 판본, 3.27 시점 판본, 그리고 Android 16 내용이 추가된 현재 판본입니다. 판본 사이의 차이는 몇 문장에 불과해서, 버전 필터 없이 BM25로 검색하면 세 판본의 점수 차이가 2%도 나지 않고 1위는 3.27 판본이 아닙니다.
 
-| 질의 (opt-out 근거) | 점수 | 판본 |
-| --- | --- | --- |
-| 1위 | 60.54 | 현재 판본 |
-| 2위 | 59.64 | 3.27 판본 |
-| 3위 | 59.55 | 3.27 출시 전 판본 |
+| 질의 (opt-out 근거) | 점수  | 판본              |
+| ------------------- | ----- | ----------------- |
+| 1위                 | 60.54 | 현재 판본         |
+| 2위                 | 59.64 | 3.27 판본         |
+| 3위                 | 59.55 | 3.27 출시 전 판본 |
 
 현재 판본을 근거로 쓰면 답이 달라집니다. 3.27 판본은 opt-out이 "Android SDK 15+를 대상으로 하는 앱"에 적용된다고 썼지만, 현재 판본은 Android 16부터 opt-out이 불가능하다는 이유로 이를 "SDK 15"로 좁혔습니다. 그래서 근거마다 필요한 판본을 정해 두고, 검색 결과가 다른 판본이면 문장이 같아도 받지 않습니다(`src/fma/evidence.py`, `tests/test_version_guard.py`).
 

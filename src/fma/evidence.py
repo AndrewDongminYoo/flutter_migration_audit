@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-
 from typing import TYPE_CHECKING
 
 from .corpus import Chunk, normalize
@@ -52,10 +51,15 @@ class Evidence:
     rank: int  # 1-based rank of the accepted chunk among the candidates
 
     def source_label(self) -> str:
-        version = {"flutter-3.24": "Flutter 3.24 문서", "flutter-3.27": "Flutter 3.27 문서"}.get(
-            self.snapshot_id, "현재 문서"
+        version = {
+            "flutter-3.24": "Flutter 3.24 문서",
+            "flutter-3.27": "Flutter 3.27 문서",
+        }.get(self.snapshot_id, "현재 문서")
+        repo = (
+            "flutter/flutter"
+            if not re.fullmatch(r"[0-9a-f]{40}", self.revision)
+            else "flutter/website"
         )
-        repo = "flutter/flutter" if not re.fullmatch(r"[0-9a-f]{40}", self.revision) else "flutter/website"
         rev = self.revision[:10]
         label = f"{version} ({repo} {rev})"
         if self.later_correction:
@@ -99,9 +103,13 @@ def quote_for(chunk: Chunk, must_contain: str) -> str:
     return normalize(must_contain)
 
 
-def resolve(spec: Spec, target: Release, index: Retriever, top_k: int = 20) -> Evidence | None:
+def resolve(
+    spec: Spec, target: Release, index: Retriever, top_k: int = 20
+) -> Evidence | None:
     snapshot = required_snapshot(spec, target)
-    candidates = index.search(spec.query, snapshots={snapshot}, kinds=spec.kinds, top_k=top_k)
+    candidates = index.search(
+        spec.query, snapshots={snapshot}, kinds=spec.kinds, top_k=top_k
+    )
     for rank, (_, chunk) in enumerate(candidates, start=1):
         if accept(chunk, spec, target):
             return Evidence(

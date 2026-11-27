@@ -60,7 +60,7 @@ def split_sections(text: str) -> list[tuple[str, str]]:
         sections.append(("", text[: marks[0].start()] if marks else text))
     for i, m in enumerate(marks):
         end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
-        sections.append((m.group(2).strip(), text[m.start(): end]))
+        sections.append((m.group(2).strip(), text[m.start() : end]))
     return [(h, t) for h, t in sections if t.strip()]
 
 
@@ -72,13 +72,17 @@ def load_chunks(root: Path = ROOT) -> list[Chunk]:
             raise CorpusMissing(f"{path} 가 없습니다.")
         for line in path.open(encoding="utf-8"):
             doc = json.loads(line)
-            source = root / "data" / "raw" / "snapshots" / doc["snapshot_id"] / doc["path"]
+            source = (
+                root / "data" / "raw" / "snapshots" / doc["snapshot_id"] / doc["path"]
+            )
             if not source.exists():
                 raise CorpusMissing(
                     f"{source} 가 없습니다. scripts/fetch_snapshots.py와 "
                     "scripts/fetch_api_docs.py로 코퍼스를 먼저 만드세요."
                 )
-            for i, (heading, text) in enumerate(split_sections(source.read_text(encoding="utf-8"))):
+            for i, (heading, text) in enumerate(
+                split_sections(source.read_text(encoding="utf-8"))
+            ):
                 chunks.append(
                     Chunk(
                         chunk_id=f"{doc['doc_id']}#{i}",

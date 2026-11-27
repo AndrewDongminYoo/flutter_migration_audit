@@ -60,7 +60,9 @@ FOOTER_STABLE = re.compile(r"(?:In )?[Ss]table release:\s*([^\s<]+)")
 TITLE = re.compile(r"^title:\s*(.+)$", re.MULTILINE)
 INDEX_SECTION = re.compile(r"^###\s+(.+)$")
 INDEX_BULLET_REF = re.compile(r"^\s*[*-]\s+\[(.+?)\]\[([^\]]*)\]")
-INDEX_BULLET_URL = re.compile(r"^\s*[*-]\s+\[(.+?)\]\((/release/breaking-changes/[^)#\s]+)")
+INDEX_BULLET_URL = re.compile(
+    r"^\s*[*-]\s+\[(.+?)\]\((/release/breaking-changes/[^)#\s]+)"
+)
 REF_DEF = re.compile(r"^\[(.+?)\]:\s*(\S+)")
 
 
@@ -72,11 +74,21 @@ def git(*args: str) -> str:
 
 def ensure_clone() -> None:
     if CLONE.exists():
-        subprocess.run(["git", "-C", str(CLONE), "fetch", "-q", "origin", "main:main"], check=True)
+        subprocess.run(
+            ["git", "-C", str(CLONE), "fetch", "-q", "origin", "main:main"], check=True
+        )
     else:
         RAW.mkdir(parents=True, exist_ok=True)
         subprocess.run(
-            ["git", "clone", "-q", "--bare", "--filter=blob:none", WEBSITE_REPO, str(CLONE)],
+            [
+                "git",
+                "clone",
+                "-q",
+                "--bare",
+                "--filter=blob:none",
+                WEBSITE_REPO,
+                str(CLONE),
+            ],
             check=True,
         )
     # Fetching blobs by id into a partial clone can leave the commit-graph
@@ -98,7 +110,7 @@ def stable_release_dates() -> dict[str, str]:
 def split_root(path: str) -> tuple[str, str] | None:
     for root in CONTENT_ROOTS:
         if path.startswith(root):
-            return root, path[len(root):]
+            return root, path[len(root) :]
     return None
 
 
@@ -144,9 +156,19 @@ def prefetch_blobs(oids: list[str]) -> None:
     clone are slow and fail intermittently."""
     for i in range(0, len(oids), 200):
         subprocess.run(
-            ["git", "-C", str(CLONE), "-c", "fetch.negotiationAlgorithm=noop",
-             "fetch", "-q", "origin", "--no-tags", "--no-write-fetch-head",
-             *oids[i:i + 200]],
+            [
+                "git",
+                "-C",
+                str(CLONE),
+                "-c",
+                "fetch.negotiationAlgorithm=noop",
+                "fetch",
+                "-q",
+                "origin",
+                "--no-tags",
+                "--no-write-fetch-head",
+                *oids[i : i + 200],
+            ],
             check=True,
         )
 
@@ -195,7 +217,8 @@ def extract(snapshot_id: str, commit: str) -> list[dict]:
                 "commit": commit,
                 "commit_date": commit_date,
                 "path": rel,
-                "url": "https://docs.flutter.dev/" + rel.removesuffix(".md").removesuffix("/index"),
+                "url": "https://docs.flutter.dev/"
+                + rel.removesuffix(".md").removesuffix("/index"),
                 "kind": kind,
                 "title": title.group(1).strip().strip("'\"") if title else None,
                 "landed_in": landed.group(1) if landed else None,
@@ -242,7 +265,9 @@ def main() -> None:
         records = extract(snap["snapshot_id"], snap["commit"])
         snap["doc_count"] = len(records)
         all_records.extend(records)
-        print(f"{snap['snapshot_id']:14} {snap['commit'][:10]} {snap['commit_date']}  {len(records)} docs")
+        print(
+            f"{snap['snapshot_id']:14} {snap['commit'][:10]} {snap['commit_date']}  {len(records)} docs"
+        )
 
     MANIFEST.mkdir(parents=True, exist_ok=True)
     (MANIFEST / "snapshots.json").write_text(

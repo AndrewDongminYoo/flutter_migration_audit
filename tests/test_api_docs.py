@@ -4,7 +4,9 @@ import importlib.util
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("fetch_api_docs", ROOT / "scripts" / "fetch_api_docs.py")
+spec = importlib.util.spec_from_file_location(
+    "fetch_api_docs", ROOT / "scripts" / "fetch_api_docs.py"
+)
 fad = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fad)
 
@@ -46,7 +48,10 @@ def test_parse_expands_macros_and_records_unresolved():
     bar = next(d for d in fad.parse(SOURCE, templates) if d["name"] == "Bar")
     members = dict(bar["members"])
     assert "padded by the status bar height" in members["primary"]
-    assert "Outer text" in members["nested"] and "padded by the status bar height" in members["nested"]
+    assert (
+        "Outer text" in members["nested"]
+        and "padded by the status bar height" in members["nested"]
+    )
     assert members["missing"] == "{@macro dart.ui.Missing}"
     assert bar["unresolved"] == {"dart.ui.Missing"}
     # Template markers do not leak into the class doc that defines them.

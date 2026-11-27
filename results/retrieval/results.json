@@ -34,9 +34,7 @@
       "question": "After upgrading Flutter from 3.24 to 3.27, my Android app now draws behind the status bar. Why did this start happening?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
-      "gold_sections": [
-        "Context"
-      ],
+      "gold_sections": ["Context"],
       "methods": {
         "bm25": {
           "rank": null,
@@ -105,9 +103,7 @@
       "question": "Which Android SDK does a Flutter 3.27 app target by default?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
-      "gold_sections": [
-        "Timeline"
-      ],
+      "gold_sections": ["Timeline"],
       "methods": {
         "bm25": {
           "rank": 2,
@@ -176,9 +172,7 @@
       "question": "I pinned targetSdk to 34 in build.gradle. Will upgrading to Flutter 3.27 still make my app edge-to-edge?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
-      "gold_sections": [
-        "Context"
-      ],
+      "gold_sections": ["Context"],
       "methods": {
         "bm25": {
           "rank": 1,
@@ -247,9 +241,7 @@
       "question": "How do I keep the old non edge-to-edge layout on Android 15 after moving to Flutter 3.27?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
-      "gold_sections": [
-        "Migration guide"
-      ],
+      "gold_sections": ["Migration guide"],
       "methods": {
         "bm25": {
           "rank": null,
@@ -318,9 +310,7 @@
       "question": "Is the windowOptOutEdgeToEdgeEnforcement opt-out a permanent solution?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
-      "gold_sections": [
-        "Context"
-      ],
+      "gold_sections": ["Context"],
       "methods": {
         "bm25": {
           "rank": null,
@@ -389,9 +379,7 @@
       "question": "My app already calls SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge). Do I need to migrate anything for Flutter 3.27?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
-      "gold_sections": [
-        "Context"
-      ],
+      "gold_sections": ["Context"],
       "methods": {
         "bm25": {
           "rank": 1,
@@ -460,9 +448,7 @@
       "question": "My video player hides the system bars with SystemUiMode.immersiveSticky. Will that still work when the app targets Android 15?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "api/services/SystemUiMode.md",
-      "gold_sections": [
-        "SystemUiMode.immersiveSticky"
-      ],
+      "gold_sections": ["SystemUiMode.immersiveSticky"],
       "methods": {
         "bm25": {
           "rank": 3,
@@ -531,9 +517,7 @@
       "question": "Does SystemUiMode.leanBack still work on Android 15 with Flutter 3.27?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "api/services/SystemUiMode.md",
-      "gold_sections": [
-        "SystemUiMode.leanBack"
-      ],
+      "gold_sections": ["SystemUiMode.leanBack"],
       "methods": {
         "bm25": {
           "rank": 2,
@@ -602,9 +586,7 @@
       "question": "What does SystemUiMode.edgeToEdge do on Android?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "api/services/SystemUiMode.md",
-      "gold_sections": [
-        "SystemUiMode.edgeToEdge"
-      ],
+      "gold_sections": ["SystemUiMode.edgeToEdge"],
       "methods": {
         "bm25": {
           "rank": 1,
@@ -673,9 +655,7 @@
       "question": "How do I stop my app content from being covered by the Android status bar?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "ui/adaptive-responsive/safearea-mediaquery.md",
-      "gold_sections": [
-        "SafeArea"
-      ],
+      "gold_sections": ["SafeArea"],
       "methods": {
         "bm25": {
           "rank": 5,
@@ -744,9 +724,7 @@
       "question": "Where should I put SafeArea in a Scaffold?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "ui/adaptive-responsive/safearea-mediaquery.md",
-      "gold_sections": [
-        "SafeArea"
-      ],
+      "gold_sections": ["SafeArea"],
       "methods": {
         "bm25": {
           "rank": 5,
@@ -815,9 +793,7 @@
       "question": "Does AppBar add padding for the status bar automatically?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "api/material/AppBar.md",
-      "gold_sections": [
-        "AppBar.primary"
-      ],
+      "gold_sections": ["AppBar.primary"],
       "methods": {
         "bm25": {
           "rank": null,
@@ -886,9 +862,7 @@
       "question": "I added the edge-to-edge opt-out attribute but the app is still edge-to-edge in dark mode. Which styles file do I need to change?",
       "gold_snapshot": "latest",
       "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
-      "gold_sections": [
-        "Migration guide"
-      ],
+      "gold_sections": ["Migration guide"],
       "methods": {
         "bm25": {
           "rank": 1,
@@ -957,9 +931,7 @@
       "question": "My app never calls setEnabledSystemUIMode. Is it affected by the new edge-to-edge default in Flutter 3.27?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "release/breaking-changes/default-systemuimode-edge-to-edge.md",
-      "gold_sections": [
-        "Summary"
-      ],
+      "gold_sections": ["Summary"],
       "methods": {
         "bm25": {
           "rank": null,
@@ -1028,9 +1000,7 @@
       "question": "Which SystemUiMode values stop working on Android 15 unless I opt out of edge-to-edge?",
       "gold_snapshot": "flutter-3.27",
       "gold_path": "api/services/SystemUiMode.md",
-      "gold_sections": [
-        "SystemUiMode (enum, services library)"
-      ],
+      "gold_sections": ["SystemUiMode (enum, services library)"],
       "methods": {
         "bm25": {
           "rank": null,

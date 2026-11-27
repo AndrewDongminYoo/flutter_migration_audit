@@ -38,8 +38,16 @@ def load_questions(path: Path = QUESTIONS) -> list[Question]:
     for line in path.open(encoding="utf-8"):
         q = json.loads(line)
         g = q["gold"]
-        out.append(Question(q["id"], q["question"], g["snapshot"], g["path"],
-                            g["must_contain"], g.get("heading")))
+        out.append(
+            Question(
+                q["id"],
+                q["question"],
+                g["snapshot"],
+                g["path"],
+                g["must_contain"],
+                g.get("heading"),
+            )
+        )
     return out
 
 
@@ -64,5 +72,8 @@ def gold_sections(chunks: list[Chunk], q: Question) -> set[str]:
 
 
 def is_wrong_version(chunk: Chunk, q: Question, sections: set[str]) -> bool:
-    return (chunk.snapshot_id != q.gold_snapshot and doc_path(chunk) == q.path
-            and (chunk.heading in sections or matches_text(chunk, q)))
+    return (
+        chunk.snapshot_id != q.gold_snapshot
+        and doc_path(chunk) == q.path
+        and (chunk.heading in sections or matches_text(chunk, q))
+    )

@@ -1,8 +1,15 @@
 import json
 from collections import Counter
 
-from fma.evalset import QUESTIONS, TARGET, doc_path, gold_sections, is_gold, load_questions
 from fma.corpus import ROOT
+from fma.evalset import (
+    QUESTIONS,
+    TARGET,
+    doc_path,
+    gold_sections,
+    is_gold,
+    load_questions,
+)
 
 RESULTS = ROOT / "results" / "retrieval" / "results.json"
 
@@ -30,7 +37,9 @@ def test_target_questions_have_lookalike_revisions(index):
     for q in load_questions():
         if q.snapshot != "target":
             continue
-        other = {c.snapshot_id for c in index.chunks if doc_path(c) == q.path} - {TARGET}
+        other = {c.snapshot_id for c in index.chunks if doc_path(c) == q.path} - {
+            TARGET
+        }
         lookalike += bool(other)
     assert lookalike == 14
 
@@ -41,5 +50,7 @@ def test_committed_bm25_results_are_reproducible(index):
     for q in load_questions():
         for name, snaps in (("bm25", None), ("bm25+version", {TARGET})):
             ranked = index.search(q.question, snapshots=snaps, top_k=data["top_k"])
-            rank = next((i for i, (_, c) in enumerate(ranked, 1) if is_gold(c, q)), None)
+            rank = next(
+                (i for i, (_, c) in enumerate(ranked, 1) if is_gold(c, q)), None
+            )
             assert by_id[q.id]["methods"][name]["rank"] == rank, (q.id, name)
