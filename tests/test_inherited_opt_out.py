@@ -279,3 +279,16 @@ def test_malformed_snippet_falls_back_to_scanner():
                 "  <item name=\"android:windowOptOutEdgeToEdgeEnforcement\">true</item>\n</style>\n& \n",
                 "values/styles.xml", "values", inputs)
     assert [(s.name, s.opt_out_value, s.opt_out.line) for s in inputs.styles] == [("NormalTheme", True, 4)]
+
+
+def test_language_outranks_orientation_and_night(index):
+    """Codex review on PR #19 (comment 4718584612), exact case."""
+    inputs = _inputs(("values", xml(("NormalTheme", FRAMEWORK, "true"))),
+                     ("values-en", xml(("Base", FRAMEWORK, "false"))),
+                     ("values-land-night", xml(("Base", FRAMEWORK, "true"))),
+                     ("values-en-land-night-v35", xml(("NormalTheme", "@style/Base", None))))
+    r = resolve_opt_out(inputs.styles, "NormalTheme", "values-en-land-night-v35")
+    assert (r.value, [s.qualifier for s in r.styles]) == (False, ["values-en-land-night-v35", "values-en"])
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    assert finding(report, "opt_out").verdict == NOT_AFFECTED
+    assert any(f.key == "opt_out_night" and "values-en-land-night-v35" in f.reason for f in report.findings)
