@@ -12,7 +12,10 @@ from dataclasses import dataclass, field
 
 from .evidence import Evidence, Spec, resolve
 from .retrieval import Retriever
-from .signals import DEVICE_API, AppInputs, Clue, config_name, qualifier_parts, resolve_opt_out
+from .signals import (
+    DEVICE_API, THRESHOLD_KINDS, AppInputs, Clue, config_name, device_config, normalize_config,
+    qualifier_parts, resolve_opt_out,
+)
 from .versions import Release, check_range
 
 AFFECTED, NOT_AFFECTED, NEEDS_CHECK = "affected", "not_affected", "needs_check"
@@ -268,19 +271,35 @@ class Auditor:
                      "기본 설정에서는 opt-out이 적용됩니다.",
                      check="언어·다크 모드·화면 크기 등 한정자별로 opt-out이 유지되는지 직접 확인하세요.")
             return
-        configs = [{"version": DEVICE_API}]
+        default = device_config("values")
+        configs = [dict(default)]
         for kind in kinds:
-            configs = [c | ({kind: v} if v is not None else {})
-                       for c in configs for v in [None, *sorted(values[kind], key=str)]]
-        configs.sort(key=len)
+            options = sorted(values[kind] | {"notnight"}) if kind == "night" else [None, *sorted(values[kind], key=str)]
+            configs = [c | ({kind: v} if v is not None else {}) for c in configs for v in options]
+        normalized: list[dict] = []
+        for c in configs:
+            c = normalize_config(c, set(kinds))
+            if c != default and c not in normalized:
+                normalized.append(c)
+        configs = sorted(normalized, key=len)
         reported: list[tuple[dict, tuple]] = []
-        for config in configs[1:]:  # configs[0] is the default
+
+        def covers(smaller: dict, larger: dict) -> bool:
+            for k, v in smaller.items():
+                if k not in larger:
+                    return False
+                if larger[k] != v and not (k in THRESHOLD_KINDS and larger[k] >= v):
+                    return False
+            return True
+
+        for config in configs:
             result = resolve_opt_out(inp.styles, theme_name, config)
             if result is None or result.value:
                 continue
-            outcome = (result.clue, result.value, result.unresolved_value, result.missing_parent)
-            if any(o == outcome and all(config.get(k) == v for k, v in c.items()) for c, o in reported):
-                continue  # a smaller configuration already shows this
+            outcome = (tuple((s.qualifier, s.name) for s in result.styles),
+                       result.value, result.unresolved_value, result.missing_parent)
+            if any(o == outcome and covers(c, config) for c, o in reported):
+                continue  # a smaller configuration with the same style chain already shows this
             reported.append((config, outcome))
             name = config_name(config)
             if result.unresolved_value:
@@ -293,7 +312,7 @@ class Auditor:
                 detail = "적용되는 스타일 체인에 opt-out 항목이 없습니다"
             used = " → ".join(f"{s.qualifier}/{s.name}" for s in result.styles)
             clues = [s.clue for s in result.styles] + ([result.clue] if result.clue else [])
-            if "night" in config:
+            if config.get("night") == "night":
                 self.add("opt_out_night", "다크 모드 스타일의 opt-out", NEEDS_CHECK,
                          f"`{name}` 설정에서 Android가 고르는 스타일 체인({used})에서 {detail}. "
                          "Flutter 3.27 시점 문서는 다크 모드 스타일을 언급하지 않았고, 이후 문서에서 같은 항목을 넣으라는 안내가 추가됐습니다.",

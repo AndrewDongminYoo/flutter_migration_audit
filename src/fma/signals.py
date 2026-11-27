@@ -131,16 +131,33 @@ def qualifier_parts(qualifier: str) -> dict[str, str | int]:
 
 
 def device_config(qualifier: str) -> dict[str, str | int]:
+    """The API 35 device configuration that `qualifier` describes. A device is
+    always in day or night mode, so an unspecified mode means `notnight`."""
     config = qualifier_parts(qualifier)
     config["version"] = DEVICE_API
+    config.setdefault("night", "notnight")
     return config
+
+
+def normalize_config(config: dict, kinds: set[str]) -> dict:
+    """Make a generated configuration physically possible. A device's current
+    width and height are never below its smallest width, so where the
+    supplied resources use `w`/`h` qualifiers they are raised to `sw`."""
+    sw = config.get("sw")
+    if not isinstance(sw, int):
+        return config
+    out = dict(config)
+    for k in ("w", "h"):
+        if k in kinds:
+            out[k] = max(out.get(k, sw), sw)
+    return out
 
 
 def config_name(config: dict) -> str:
     """Render a device configuration as a resource directory name (version omitted)."""
     tokens = []
     for kind in PRECEDENCE:
-        if kind == "version" or kind not in config:
+        if kind == "version" or kind not in config or (kind == "night" and config[kind] == "notnight"):
             continue
         value = config[kind]
         tokens.append(f"{kind}{value}dp" if kind in ("sw", "w", "h") else str(value))

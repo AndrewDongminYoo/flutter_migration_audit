@@ -240,11 +240,13 @@ def test_locale_variant_outranks_night(index):
     assert resolve_opt_out(inputs.styles, "NormalTheme", "values-zh-night").value is False
     report = audit("3.24.0", "3.27.0", inputs, index)
     assert finding(report, "opt_out").verdict == NOT_AFFECTED
-    # values-zh already loses the opt-out through values-zh/Base, so the
-    # larger values-zh-night configuration is not reported again.
-    variants = [f for f in report.findings if f.key in ("opt_out_variant", "opt_out_night")]
-    assert [f.title for f in variants] == ["`values-zh` 설정의 opt-out"]
-    assert "values-zh/Base" in variants[0].reason and "`false`" in variants[0].reason
+    # Two different style chains lose the opt-out, so both are reported:
+    # values/NormalTheme → values-zh/Base, and values-zh-night/NormalTheme → values-zh/Base.
+    variants = {f.title: f for f in report.findings if f.key in ("opt_out_variant", "opt_out_night")}
+    assert set(variants) == {"`values-zh` 설정의 opt-out", "다크 모드 스타일의 opt-out"}
+    assert "values/NormalTheme → values-zh/Base" in variants["`values-zh` 설정의 opt-out"].reason
+    night = variants["다크 모드 스타일의 opt-out"].reason
+    assert "`values-zh-night`" in night and "values-zh-night/NormalTheme → values-zh/Base" in night
 
 
 def test_commented_out_style_is_ignored():
@@ -339,3 +341,41 @@ def test_too_many_combinations_reports_uncertainty(index, monkeypatch):
                      ("values-night", xml(("Other", FRAMEWORK, None))))
     f = finding(audit("3.24.0", "3.27.0", inputs, index), "opt_out_variant")
     assert f.verdict == NEEDS_CHECK and "4개" in f.reason
+
+
+# --- local adversarial review, round 2 -----------------------------------------
+
+def test_notnight_variant_is_the_day_result(index):
+    inputs = _inputs(("values", xml(("NormalTheme", FRAMEWORK, "true"))),
+                     ("values-notnight", xml(("NormalTheme", FRAMEWORK, "false"))))
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    f = finding(report, "opt_out")
+    assert f.verdict == AFFECTED and "values-notnight/styles.xml" in f.clues[1].file
+    assert not [x for x in report.findings if x.key == "opt_out_night"]
+
+
+def test_impossible_width_combinations_are_skipped(index):
+    inputs = _inputs(("values", xml(("NormalTheme", FRAMEWORK, "true"), ("Base", FRAMEWORK, "true"))),
+                     ("values-w600dp", xml(("NormalTheme", "@style/Base", None))),
+                     ("values-sw720dp", xml(("Base", FRAMEWORK, "false"))))
+    titles = [f.title for f in audit("3.24.0", "3.27.0", inputs, index).findings if f.key == "opt_out_variant"]
+    # A device with sw720dp has a current width of at least 720dp, so values-w600dp
+    # applies too: the real failing configuration is sw720dp with w720dp.
+    assert titles == ["`values-sw720dp-w720dp` 설정의 opt-out"]
+
+
+def test_larger_threshold_with_the_same_chain_is_not_repeated(index):
+    inputs = _inputs(("values", xml(("NormalTheme", FRAMEWORK, "true"), ("Base", FRAMEWORK, "false"))),
+                     ("values-sw600dp", xml(("NormalTheme", "@style/Base", None))),
+                     ("values-sw720dp", xml(("Other", FRAMEWORK, None))))
+    titles = [f.title for f in audit("3.24.0", "3.27.0", inputs, index).findings if f.key == "opt_out_variant"]
+    assert titles == ["`values-sw600dp` 설정의 opt-out"]
+
+
+def test_different_chain_with_the_same_outcome_is_reported(index):
+    inputs = _inputs(("values", xml(("NormalTheme", FRAMEWORK, "true"))),
+                     ("values-en", xml(("NormalTheme", FRAMEWORK, None))),
+                     ("values-en-night", xml(("NormalTheme", FRAMEWORK, None))))
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    files = sorted(f.clues[0].file for f in report.findings if f.key in ("opt_out_variant", "opt_out_night"))
+    assert files == ["values-en-night/styles.xml", "values-en/styles.xml"]
