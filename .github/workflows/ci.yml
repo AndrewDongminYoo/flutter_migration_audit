@@ -34,7 +34,45 @@ jobs:
           uv run --python 3.12 scripts/fetch_api_docs.py
           git diff --exit-code -- data/manifest
 
-      # No embedding index in CI (a cold build takes about 15 minutes), so the
-      # embedding tests skip and the rest run against the real corpus.
+      # The index file name is a hash of the model and the embedded sections,
+      # so it changes exactly when the index must be rebuilt.
+      - name: Locate embedding index
+        id: index
+        run: |
+          name=$(uv run python -c 'from fma.corpus import load_chunks; from fma.dense import cache_path; from fma.retrieval import cli_chunks; print(cache_path(cli_chunks(load_chunks())).name)')
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "FASTEMBED_CACHE_PATH=$HOME/.cache/fastembed" >> "$GITHUB_ENV"
+
+      # A partial hit restores the model, so only the index is rebuilt.
+      - name: Restore embedding index
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            data/index
+            ~/.cache/fastembed
+          key: embedding-${{ steps.index.outputs.name }}
+          restore-keys: embedding-
+
+      - name: Build embedding index
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          INDEX_NAME: ${{ steps.index.outputs.name }}
+        run: |
+          uv run fma index
+          find data/index -name '*.npy' ! -name "$INDEX_NAME" -delete
+
+      # Saved before the tests, so a failing test does not discard the build.
+      - name: Save embedding index
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            data/index
+            ~/.cache/fastembed
+          key: embedding-${{ steps.index.outputs.name }}
+
       - name: Test
+        env:
+          FMA_REQUIRE_EMBEDDING_INDEX: "1"
         run: uv run pytest -rs
