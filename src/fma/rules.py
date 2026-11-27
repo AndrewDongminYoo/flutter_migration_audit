@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .corpus import Index
 from .evidence import Evidence, Spec, resolve
+from .retrieval import Retriever
 from .signals import AppInputs, Clue
 from .versions import Release, check_range
 
@@ -95,10 +95,11 @@ class Report:
     files: list[str]
     findings: list[Finding]
     notes: list[str]
+    retriever: str | None = None
 
 
 class Auditor:
-    def __init__(self, cur: Release, tgt: Release, inputs: AppInputs, index: Index):
+    def __init__(self, cur: Release, tgt: Release, inputs: AppInputs, index: Retriever):
         self.cur, self.tgt, self.inputs, self.index = cur, tgt, inputs, index
         self.findings: list[Finding] = []
         self.notes: list[str] = []
@@ -306,7 +307,7 @@ class Auditor:
         self.overlay_colors()
 
 
-def audit(current: str, target: str, inputs: AppInputs, index: Index) -> Report:
+def audit(current: str, target: str, inputs: AppInputs, index: Retriever) -> Report:
     cur, tgt = check_range(current, target)
     auditor = Auditor(cur, tgt, inputs, index)
     auditor.run()

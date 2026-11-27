@@ -220,20 +220,20 @@ wheels = [
 name = "flutter-migration-audit"
 version = "0.1.0"
 source = { editable = "." }
+dependencies = [
+    { name = "fastembed" },
+]
 
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
 ]
-eval = [
-    { name = "fastembed" },
-]
 
 [package.metadata]
+requires-dist = [{ name = "fastembed", specifier = ">=0.9" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]
-eval = [{ name = "fastembed", specifier = ">=0.9.1" }]
 
 [[package]]
 name = "fsspec"

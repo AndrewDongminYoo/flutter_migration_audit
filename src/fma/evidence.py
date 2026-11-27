@@ -11,8 +11,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .corpus import Chunk, Index, normalize
+from typing import TYPE_CHECKING
+
+from .corpus import Chunk, normalize
 from .versions import Release
+
+if TYPE_CHECKING:
+    from .retrieval import Retriever
 
 LATEST = "latest"
 
@@ -94,7 +99,7 @@ def quote_for(chunk: Chunk, must_contain: str) -> str:
     return normalize(must_contain)
 
 
-def resolve(spec: Spec, target: Release, index: Index, top_k: int = 20) -> Evidence | None:
+def resolve(spec: Spec, target: Release, index: Retriever, top_k: int = 20) -> Evidence | None:
     snapshot = required_snapshot(spec, target)
     candidates = index.search(spec.query, snapshots={snapshot}, kinds=spec.kinds, top_k=top_k)
     for rank, (_, chunk) in enumerate(candidates, start=1):

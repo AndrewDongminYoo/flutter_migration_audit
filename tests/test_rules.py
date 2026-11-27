@@ -160,7 +160,9 @@ def test_missing_evidence_downgrades_verdict(index, monkeypatch):
 # --- CLI -------------------------------------------------------------------
 
 def test_cli_json(index, capsys):
-    assert main(["audit", "--from", "3.24.5", "--to", "3.27.1", "--input", str(SAMPLES / "player_opt_out"), "--json"]) == 0
+    # bm25 keeps this test independent of the embedding index.
+    assert main(["audit", "--from", "3.24.5", "--to", "3.27.1", "--input", str(SAMPLES / "player_opt_out"),
+                 "--retriever", "bm25", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
     assert [f["verdict_label"] for f in data["findings"]] == ["영향 있음", "영향 없음"]
 

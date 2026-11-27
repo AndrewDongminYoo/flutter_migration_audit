@@ -19,8 +19,10 @@ def to_text(report: Report) -> str:
     out = [
         f"Flutter {report.current} → {report.target} · Android 시스템 바 / edge-to-edge",
         f"입력: {', '.join(report.files) if report.files else '(없음)'}",
-        "",
     ]
+    if report.retriever:
+        out.append(f"근거 검색: {report.retriever} + 버전 필터")
+    out.append("")
     counts = {v: sum(f.verdict == v for f in report.findings) for v in ORDER}
     out.append("요약: " + " · ".join(f"{LABELS[v]} {counts[v]}" for v in ORDER))
     out.append("")

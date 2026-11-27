@@ -10,10 +10,10 @@
       "wrong_version@1": 0.06666666666666667
     },
     "embedding": {
-      "hit@1": 0.0,
+      "hit@1": 0.06666666666666667,
       "hit@3": 0.6,
-      "mrr@10": 0.29444444444444445,
-      "wrong_version@1": 0.3333333333333333
+      "mrr@10": 0.33,
+      "wrong_version@1": 0.26666666666666666
     },
     "bm25+version": {
       "hit@1": 0.3333333333333333,
@@ -125,7 +125,7 @@
           ]
         },
         "embedding": {
-          "rank": 6,
+          "rank": 5,
           "top1": {
             "doc_id": "latest:deployment/android.md",
             "heading": "Android SDK versions",
@@ -622,17 +622,17 @@
           ]
         },
         "embedding": {
-          "rank": 2,
+          "rank": 1,
           "top1": {
-            "doc_id": "latest:api/services/SystemUiMode.md",
+            "doc_id": "flutter-3.27:api/services/SystemUiMode.md",
             "heading": "SystemUiMode.edgeToEdge",
-            "snapshot": "latest"
+            "snapshot": "flutter-3.27"
           },
-          "top1_wrong_version": true,
-          "top1_identical_text": true,
+          "top1_wrong_version": false,
+          "top1_identical_text": false,
           "top3": [
-            "latest api/services/SystemUiMode.md › SystemUiMode.edgeToEdge",
             "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.edgeToEdge",
+            "latest api/services/SystemUiMode.md › SystemUiMode.edgeToEdge",
             "flutter-3.24 api/services/SystemUiMode.md › SystemUiMode.edgeToEdge"
           ]
         },
@@ -704,7 +704,7 @@
           "top3": [
             "latest api/services/SystemUiMode.md › SystemUiMode.manual",
             "flutter-3.27 api/services/SystemUiMode.md › SystemUiMode.manual",
-            "flutter-3.27 api/services/SystemUiOverlayStyle.md › SystemUiOverlayStyle.systemStatusBarContrastEnforced"
+            "flutter-3.24 api/services/SystemUiOverlayStyle.md › SystemUiOverlayStyle.systemStatusBarContrastEnforced"
           ]
         },
         "bm25+version": {
@@ -764,7 +764,7 @@
           ]
         },
         "embedding": {
-          "rank": 2,
+          "rank": 3,
           "top1": {
             "doc_id": "latest:release/breaking-changes/viewport-fit-cover-safe-area.md",
             "heading": "Option 1: Keep edge-to-edge rendering and wrap UI in `SafeArea`",
@@ -774,8 +774,8 @@
           "top1_identical_text": false,
           "top3": [
             "latest release/breaking-changes/viewport-fit-cover-safe-area.md › Option 1: Keep edge-to-edge rendering and wrap UI in `SafeArea`",
-            "flutter-3.27 ui/adaptive-responsive/safearea-mediaquery.md › SafeArea",
-            "latest ui/adaptive-responsive/safearea-mediaquery.md › SafeArea"
+            "flutter-3.24 ui/adaptive-responsive/safearea-mediaquery.md › SafeArea",
+            "flutter-3.27 ui/adaptive-responsive/safearea-mediaquery.md › SafeArea"
           ]
         },
         "bm25+version": {
@@ -835,7 +835,7 @@
           ]
         },
         "embedding": {
-          "rank": 3,
+          "rank": 2,
           "top1": {
             "doc_id": "flutter-3.24:api/material/AppBar.md",
             "heading": "AppBar.primary",
@@ -845,8 +845,8 @@
           "top1_identical_text": true,
           "top3": [
             "flutter-3.24 api/material/AppBar.md › AppBar.primary",
-            "latest api/material/AppBar.md › AppBar.primary",
-            "flutter-3.27 api/material/AppBar.md › AppBar.primary"
+            "flutter-3.27 api/material/AppBar.md › AppBar.primary",
+            "latest api/material/AppBar.md › AppBar.primary"
           ]
         },
         "bm25+version": {

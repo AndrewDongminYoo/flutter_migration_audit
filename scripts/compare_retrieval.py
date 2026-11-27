@@ -12,65 +12,22 @@ Outputs:
   results/retrieval/results.json   per question, per method
   results/retrieval/report.md      summary tables
 
-Run: uv run --group eval scripts/compare_retrieval.py
+Run: uv run scripts/compare_retrieval.py
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
-import time
 from pathlib import Path
 
-import numpy as np
-
 from fma.corpus import Chunk, Index, load_chunks
+from fma.dense import MODEL, Dense
 from fma.evalset import TARGET, doc_path, gold_sections, is_gold, is_wrong_version, load_questions
 
 ROOT = Path(__file__).resolve().parent.parent
-CACHE = ROOT / "data" / "index"
 OUT = ROOT / "results" / "retrieval"
 
-MODEL = "BAAI/bge-small-en-v1.5"
 TOP_K = 10
-
-
-# --- dense retrieval ---------------------------------------------------------
-
-class Dense:
-    def __init__(self, chunks: list[Chunk]):
-        from fastembed import TextEmbedding
-
-        self.chunks = chunks
-        self.model = TextEmbedding(MODEL)
-        # The model reads at most 512 tokens; cut early to skip tokenizing the rest.
-        texts = [f"{c.title}\n{c.heading}\n{c.text}"[:2500] for c in chunks]
-        key = hashlib.sha256(("\0".join([MODEL] + [c.chunk_id for c in chunks] + texts)).encode()).hexdigest()[:16]
-        path = CACHE / f"{MODEL.replace('/', '__')}-{key}.npy"
-        if path.exists():
-            self.matrix = np.load(path)
-        else:
-            started = time.time()
-            vecs = np.array(list(self.model.passage_embed(texts, batch_size=64)), dtype=np.float32)
-            self.matrix = vecs / np.linalg.norm(vecs, axis=1, keepdims=True)
-            CACHE.mkdir(parents=True, exist_ok=True)
-            np.save(path, self.matrix)
-            print(f"embedded {len(texts)} chunks in {time.time() - started:.0f}s -> {path.name}")
-
-    def search(self, query: str, snapshots: set[str] | None = None, top_k: int = TOP_K):
-        q = np.array(next(iter(self.model.query_embed([query]))), dtype=np.float32)
-        q /= np.linalg.norm(q)
-        scores = self.matrix @ q
-        order = np.argsort(-scores)
-        out = []
-        for i in order:
-            c = self.chunks[i]
-            if snapshots is not None and c.snapshot_id not in snapshots:
-                continue
-            out.append((float(scores[i]), c))
-            if len(out) == top_k:
-                break
-        return out
 
 
 # --- evaluation ----------------------------------------------------------------
@@ -153,9 +110,9 @@ def main() -> None:
     target = {TARGET}
     methods = {
         "bm25": lambda q: bm25.search(q, top_k=TOP_K),
-        "embedding": lambda q: dense.search(q),
+        "embedding": lambda q: dense.search(q, top_k=TOP_K),
         "bm25+version": lambda q: bm25.search(q, snapshots=target, top_k=TOP_K),
-        "embedding+version": lambda q: dense.search(q, snapshots=target),
+        "embedding+version": lambda q: dense.search(q, snapshots=target, top_k=TOP_K),
     }
     rows = evaluate(questions, chunks, methods)
     summary = summarize(rows, list(methods))

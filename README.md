@@ -22,6 +22,9 @@ Flutter 업그레이드가 내 앱의 Android 시스템 바와 edge-to-edge 동�
 uv run --python 3.12 scripts/fetch_snapshots.py
 uv run --python 3.12 scripts/fetch_api_docs.py
 
+# 임베딩 인덱스 만들기 (한 번, 노트북 CPU에서 15분 안팎)
+uv run fma index
+
 # 디렉터리로 넣기
 uv run fma audit --from 3.24.5 --to 3.27.1 --input samples/player_default
 
@@ -30,7 +33,12 @@ uv run fma audit --from 3.24.5 --to 3.27.1 path/to/build.gradle path/to/values/s
 
 # JSON 출력
 uv run fma audit --from 3.24.5 --to 3.27.1 --input samples/player_opt_out --json
+
+# 근거 후보를 BM25로 찾기 (임베딩 인덱스가 없을 때)
+uv run fma audit --from 3.24.5 --to 3.27.1 --input samples/player_default --retriever bm25
 ```
+
+근거 후보는 기본적으로 목표 버전 스냅샷 안에서 임베딩 검색으로 찾습니다. 검색 방식과 관계없이, 후보가 근거로 채택되려면 정해 둔 판본과 정답 문장을 모두 만족해야 합니다. 그래서 검색 방식을 바꿔도 판단 결과는 같고, 달라지는 것은 근거를 찾기까지 살펴보는 후보의 순서입니다.
 
 ## 샘플: 같은 업그레이드, 다른 결과
 
@@ -61,10 +69,10 @@ edge-to-edge 마이그레이션 문서는 코퍼스에 세 가지 판본이 있�
 
 ## 검색 방식 비교
 
-질문 15개로 키워드 검색(BM25), 임베딩 검색, 그리고 각각에 버전 필터를 붙인 방식을 비교했습니다. 필터가 없는 임베딩 검색은 정답을 1위에 올린 질문이 하나도 없었고, 15개 중 5개에서 1위가 다른 판본이었습니다. 버전 필터를 붙인 임베딩 검색은 1위 적중률 0.60으로 네 방식 중 가장 좋았습니다. 버전 필터가 오히려 정답을 막는 경우와, 필터로도 해결되지 않는 실패도 함께 정리했습니다. 자세한 내용은 [docs/retrieval-comparison.md](docs/retrieval-comparison.md)에 있습니다.
+질문 15개로 키워드 검색(BM25), 임베딩 검색, 그리고 각각에 버전 필터를 붙인 방식을 비교했습니다. 필터가 없는 임베딩 검색은 정답을 1위에 올린 질문이 1개뿐이었고, 15개 중 4개에서 1위가 다른 판본이었습니다. 버전 필터를 붙인 임베딩 검색은 1위 적중률 0.60으로 네 방식 중 가장 좋았고, 그래서 CLI의 기본 검색 방식으로 쓰고 있습니다. 버전 필터가 오히려 정답을 막는 경우와, 필터로도 해결되지 않는 실패도 함께 정리했습니다. 자세한 내용은 [docs/retrieval-comparison.md](docs/retrieval-comparison.md)에 있습니다.
 
 ```sh
-uv run --group eval scripts/compare_retrieval.py
+uv run scripts/compare_retrieval.py
 ```
 
 ## 문서
@@ -78,4 +86,4 @@ uv run --group eval scripts/compare_retrieval.py
 uv run pytest
 ```
 
-코퍼스(`data/raw/`)가 없으면 코퍼스가 필요한 테스트는 건너뜁니다.
+코퍼스(`data/raw/`)가 없으면 코퍼스가 필요한 테스트는 건너뜁니다. 임베딩 인덱스(`data/index/`)가 없으면 임베딩 검색 테스트도 건너뜁니다. 테스트 중에는 인덱스를 새로 만들지 않습니다.
