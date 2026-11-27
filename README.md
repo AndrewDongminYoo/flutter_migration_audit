@@ -22,8 +22,11 @@ Flutter 업그레이드가 내 앱의 Android 시스템 바와 edge-to-edge 동�
 uv run --python 3.12 scripts/fetch_snapshots.py
 uv run --python 3.12 scripts/fetch_api_docs.py
 
-# 임베딩 인덱스 만들기 (한 번, 노트북 CPU에서 15분 안팎)
+# 임베딩 인덱스 만들기 (한 번, 노트북 CPU에서 5분 안팎)
 uv run fma index
+
+# 다른 작업과 함께 돌릴 때는 스레드 수를 줄입니다 (결과는 같고 속도만 달라집니다)
+FMA_EMBED_THREADS=4 uv run fma index
 
 # 디렉터리로 넣기
 uv run fma audit --from 3.24.5 --to 3.27.1 --input samples/player_default
@@ -38,7 +41,7 @@ uv run fma audit --from 3.24.5 --to 3.27.1 --input samples/player_opt_out --json
 uv run fma audit --from 3.24.5 --to 3.27.1 --input samples/player_default --retriever bm25
 ```
 
-근거 후보는 기본적으로 목표 버전 스냅샷 안에서 임베딩 검색으로 찾습니다. 검색 방식과 관계없이, 후보가 근거로 채택되려면 정해 둔 판본과 정답 문장을 모두 만족해야 합니다. 그래서 검색 방식을 바꿔도 판단 결과는 같고, 달라지는 것은 근거를 찾기까지 살펴보는 후보의 순서입니다.
+근거 후보는 기본적으로 목표 버전 스냅샷 안에서 임베딩 검색으로 찾습니다. CLI용 임베딩 인덱스에는 근거로 쓰일 수 있는 섹션만 넣습니다(목표 버전의 breaking change·API·가이드 문서, 그리고 이후에 고쳐진 내용을 위한 현재 판본의 breaking change 문서). 전체 코퍼스의 57%이고, 검색 비교 실험만 전체 코퍼스를 임베딩합니다. 검색 방식과 관계없이, 후보가 근거로 채택되려면 정해 둔 판본과 정답 문장을 모두 만족해야 합니다. 그래서 검색 방식을 바꿔도 판단 결과는 같고, 달라지는 것은 근거를 찾기까지 살펴보는 후보의 순서입니다.
 
 ## 실행 결과 예시
 

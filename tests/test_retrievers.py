@@ -9,6 +9,7 @@ import pytest
 from fma import cli
 from fma.cli import main
 from fma.corpus import load_chunks
+from fma.retrieval import cli_chunks, cli_scope
 from fma.evidence import resolve
 from fma.rules import E, audit, mode_spec
 from fma.signals import discover
@@ -25,9 +26,26 @@ def dense(index):
 
     try:
         # Never build in tests: a cold build takes about 15 minutes.
-        return Dense(load_chunks(), build=False)
+        return Dense(cli_chunks(load_chunks()), build=False)
     except FileNotFoundError:
         pytest.skip("embedding index not built (run `uv run fma index`)")
+
+
+def test_cli_scope_covers_every_spec(index):
+    """Every evidence spec resolves to a section inside the CLI index scope,
+    and the scope leaves out what no spec can request."""
+    scope = cli_scope()
+    assert ("flutter-3.24", None) not in scope and all(s != "flutter-3.24" for s, _ in scope)
+    assert all(k != "release-notes" for _, k in scope)
+    kept = {c.chunk_id for c in cli_chunks(index.chunks)}
+    for spec in SPECS:
+        ev = resolve(spec, TARGET, index)
+        if ev is None:
+            continue
+        chunk = next(c for c in index.chunks if c.snapshot_id == ev.snapshot_id
+                     and c.heading == ev.heading and c.url == ev.url)
+        assert chunk.chunk_id in kept, spec.key
+    assert len(kept) < len(index.chunks) * 0.6
 
 
 def key(ev):
@@ -83,3 +101,11 @@ def test_cli_rejects_version_before_loading_retriever(monkeypatch, capsys):
     monkeypatch.setattr(cli, "get_retriever", boom)
     assert main(["audit", "--from", "3.27.0", "--to", "3.29.0", "--input", str(SAMPLES / "player_default")]) == 2
     assert "스냅샷이 없습니다" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value, expected", [("6", 6), ("", None), ("0", None), ("abc", None), (" 4 ", 4)])
+def test_embed_threads_env(monkeypatch, value, expected):
+    from fma.dense import THREADS_ENV, embed_threads
+
+    monkeypatch.setenv(THREADS_ENV, value)
+    assert embed_threads() == expected
