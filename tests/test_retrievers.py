@@ -44,6 +44,24 @@ def test_dense_respects_filters(dense):
     assert hits and all(c.snapshot_id == "flutter-3.27" and c.kind == "api" for _, c in hits)
 
 
+def test_missing_index_fails_before_loading_model(monkeypatch, tmp_path):
+    """Without an index and with build=False, Dense must not construct the
+    model: construction may download it, and offline that turns skips into
+    errors."""
+    import fastembed
+
+    from fma.corpus import Chunk
+    from fma.dense import Dense
+
+    def no_model(*args, **kwargs):
+        raise AssertionError("model must not load when the index is missing")
+
+    monkeypatch.setattr(fastembed, "TextEmbedding", no_model)
+    chunk = Chunk("c#0", "c", "flutter-3.27", "guide", "t", "h", "text", "u", "r")
+    with pytest.raises(FileNotFoundError):
+        Dense([chunk], cache_dir=tmp_path, build=False)
+
+
 @pytest.mark.parametrize("sample", ["player_default", "player_opt_out"])
 def test_same_report_with_either_retriever(index, dense, sample):
     inputs = discover(SAMPLES / sample)
