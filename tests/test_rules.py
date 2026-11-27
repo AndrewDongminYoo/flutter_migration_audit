@@ -113,7 +113,11 @@ def test_missing_gradle_asks_for_it(index):
 
 def test_night_style_without_opt_out_cites_later_correction(index):
     report = run(index, make(styles=STYLES_OPT_OUT, night=STYLES_PLAIN))
-    assert verdicts(report) == {"target_sdk": AFFECTED, "opt_out": NOT_AFFECTED, "opt_out_night": NEEDS_CHECK}
+    v = verdicts(report)
+    assert {k: v[k] for k in ("target_sdk", "opt_out", "opt_out_night")} == \
+        {"target_sdk": AFFECTED, "opt_out": NOT_AFFECTED, "opt_out_night": NEEDS_CHECK}
+    # Night mode may lose the opt-out, so the edge-to-edge checks still run.
+    assert "ui_mode" in v and "layout" in v
     night = next(f for f in report.findings if f.key == "opt_out_night")
     assert [ev.later_correction for ev in night.evidence] == [True]
 

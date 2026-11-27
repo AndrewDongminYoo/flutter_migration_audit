@@ -130,6 +130,25 @@ def qualifier_parts(qualifier: str) -> dict[str, str | int]:
     return parts
 
 
+# Qualifiers whose Android matching is not exact equality and that this
+# resolver does not model: screen size falls back to smaller sizes, density
+# picks the closest bucket and scales, and BCP-47 locales (b+en+US) need
+# normalization. Directories using them are reported as unchecked.
+UNMODELED_KINDS = {"size", "density"}
+
+
+def unmodeled_qualifiers(qualifier: str) -> set[str]:
+    out = set()
+    for kind, value in qualifier_parts(qualifier).items():
+        if kind in UNMODELED_KINDS:
+            out.add(kind)
+        elif kind == "locale" and str(value).startswith("b+"):
+            out.add("BCP-47 locale")
+        elif kind.startswith("unknown:"):
+            out.add(f"알 수 없는 한정자 {value}")
+    return out
+
+
 def device_config(qualifier: str) -> dict[str, str | int]:
     """The API 35 device configuration that `qualifier` describes. A device is
     always in day or night mode, so an unspecified mode means `notnight`."""

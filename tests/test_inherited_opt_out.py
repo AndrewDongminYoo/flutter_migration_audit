@@ -379,3 +379,29 @@ def test_different_chain_with_the_same_outcome_is_reported(index):
     report = audit("3.24.0", "3.27.0", inputs, index)
     files = sorted(f.clues[0].file for f in report.findings if f.key in ("opt_out_variant", "opt_out_night"))
     assert files == ["values-en-night/styles.xml", "values-en/styles.xml"]
+
+
+# --- Codex review round 4: report uncertainty for unmodeled qualifiers -------
+
+@pytest.mark.parametrize("theme_dir, base_dir, kind", [
+    ("values-xlarge", "values-large", "size"),        # comment 4719280792
+    ("values-xhdpi", "values-hdpi", "density"),       # comment 4719280799
+    ("values-b+en+US", "values-en", "BCP-47 locale"),  # comment 4719357723
+])
+def test_unmodeled_qualifiers_are_reported_not_asserted(index, theme_dir, base_dir, kind):
+    inputs = _inputs(("values", xml(("NormalTheme", FRAMEWORK, "true"), ("Base", FRAMEWORK, "true"))),
+                     (theme_dir, xml(("NormalTheme", "@style/Base", None))),
+                     (base_dir, xml(("Base", FRAMEWORK, "false"))))
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    assert finding(report, "opt_out").verdict == NOT_AFFECTED  # the default day result
+    f = next(f for f in report.findings if f.title == "정확히 판단하지 않는 리소스 한정자")
+    assert f.verdict == NEEDS_CHECK and kind in f.reason and f"`{theme_dir}`" in f.reason
+    # The opt-out is not asserted for every configuration, so later checks run.
+    assert "ui_mode" in [x.key for x in report.findings]
+
+
+def test_clean_inputs_still_stop_after_opt_out(index):
+    inputs = _inputs(("values", xml(("NormalTheme", FRAMEWORK, "true"))),
+                     ("values-night", xml(("NormalTheme", FRAMEWORK, "true"))))
+    keys = [f.key for f in audit("3.24.0", "3.27.0", inputs, index).findings]
+    assert keys == ["target_sdk", "opt_out"]

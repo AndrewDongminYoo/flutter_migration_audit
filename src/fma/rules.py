@@ -14,7 +14,7 @@ from .evidence import Evidence, Spec, resolve
 from .retrieval import Retriever
 from .signals import (
     DEVICE_API, THRESHOLD_KINDS, AppInputs, Clue, config_name, device_config, normalize_config,
-    qualifier_parts, resolve_opt_out,
+    qualifier_parts, resolve_opt_out, unmodeled_qualifiers,
 )
 from .versions import Release, check_range
 
@@ -212,7 +212,10 @@ class Auditor:
                      "다만 문서는 이 방법을 임시 조치로 안내합니다." + caveat,
                      clues + ([own.clue] if inherited else []) + [day.clue], specs,
                      ["Android 15(API 35) 에뮬레이터에서 첫 화면 상단 콘텐츠가 상태바 아래로 들어가지 않는지 확인한다."])
-            self.opt_out_variants(theme_name)
+            if self.opt_out_variants(theme_name):
+                # Some configuration may lose the opt-out, so the checks that
+                # assume edge-to-edge still run.
+                return None
             return True
         if day.unresolved_value:
             self.add("opt_out", title, NEEDS_CHECK,
@@ -244,7 +247,7 @@ class Auditor:
 
     MAX_CONFIGS = 256
 
-    def opt_out_variants(self, theme_name: str) -> None:
+    def opt_out_variants(self, theme_name: str) -> bool:
         """Check the other device configurations the supplied resources can produce.
 
         The default result covers a day-mode API 35 device. Android resolves
@@ -255,8 +258,19 @@ class Auditor:
         the smallest configurations that lose the opt-out are reported.
         """
         inp = self.inputs
+        before = len(self.findings)
+        unmodeled = sorted({s.qualifier for s in inp.styles if unmodeled_qualifiers(s.qualifier)})
+        if unmodeled:
+            kinds_text = ", ".join(sorted({k for q in unmodeled for k in unmodeled_qualifiers(q)}))
+            self.add("opt_out_variant", "정확히 판단하지 않는 리소스 한정자", NEEDS_CHECK,
+                     f"제공된 리소스에 이 도구가 Android 선택 규칙을 정확히 따라가지 않는 한정자({kinds_text})가 있습니다: "
+                     + ", ".join(f"`{q}`" for q in unmodeled)
+                     + ". 이 디렉터리의 스타일이 opt-out 판단에 영향을 주는지는 확인하지 않았습니다.",
+                     [s.clue for s in inp.styles if s.qualifier in unmodeled][:5],
+                     tests=["해당 한정자에 맞는 Android 15 기기나 에뮬레이터 설정(화면 크기, 밀도, 언어)에서 첫 화면 상단을 확인한다."],
+                     check="이 디렉터리들의 스타일에서도 opt-out이 유지되는지 직접 확인하세요.")
         values: dict[str, set] = {}
-        for q in {s.qualifier for s in inp.styles}:
+        for q in {s.qualifier for s in inp.styles} - set(unmodeled):
             for kind, value in qualifier_parts(q).items():
                 if kind == "version":
                     continue  # every configuration is an API 35 device
@@ -270,7 +284,7 @@ class Auditor:
                      f"제공된 리소스 한정자 조합이 {combos}개라서 모두 확인하지 않았습니다. "
                      "기본 설정에서는 opt-out이 적용됩니다.",
                      check="언어·다크 모드·화면 크기 등 한정자별로 opt-out이 유지되는지 직접 확인하세요.")
-            return
+            return True
         default = device_config("values")
         configs = [dict(default)]
         for kind in kinds:
@@ -326,6 +340,7 @@ class Auditor:
                          clues,
                          tests=[f"Android 15 에뮬레이터를 `{name}`에 해당하는 설정으로 바꾸고 첫 화면 상단을 다시 확인한다."],
                          check=f"`{name}` 설정에서도 opt-out이 필요한지 확인하세요.")
+        return len(self.findings) > before
 
     def ui_mode(self) -> None:
         inp = self.inputs
