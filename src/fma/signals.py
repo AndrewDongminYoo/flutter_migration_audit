@@ -42,8 +42,62 @@ class TargetSdk:
 class Style:
     name: str
     qualifier: str  # resource directory, e.g. "values" or "values-night"
-    opt_out: Clue | None
+    opt_out: Clue | None  # the opt-out item, whatever its value
     clue: Clue
+    opt_out_value: bool | None = None
+    # Value of the `parent` attribute, if any: "NormalBase" for a local style,
+    # "@android:style/..." for a framework style.
+    parent: str | None = None
+
+
+@dataclass
+class OptOutResolution:
+    value: bool | None  # True/False if some style in the chain sets the item
+    clue: Clue | None  # where the deciding item is
+    source: str | None  # name of the style that sets it
+    chain: list[str]  # styles visited, starting with the requested one
+    missing_parent: str | None = None  # a local parent that was not provided
+
+
+def implicit_parent(style: Style) -> str | None:
+    """Android rule: an explicit `parent` attribute wins; otherwise a dotted
+    name (`NormalTheme.Video`) inherits from its prefix (`NormalTheme`)."""
+    if style.parent is not None:
+        if style.parent.startswith("@android:") or style.parent.startswith("android:"):
+            return None  # framework style: not in the app's resources
+        return style.parent.removeprefix("@style/")
+    if "." in style.name:
+        return style.name.rsplit(".", 1)[0]
+    return None
+
+
+def resolve_opt_out(styles: list[Style], name: str, qualifier: str) -> OptOutResolution | None:
+    """Follow the style's parents until one sets the opt-out item.
+
+    Parents are looked up in the same resource directory first, then in the
+    default `values` directory, as Android does. Returns None if the
+    requested style itself is not provided.
+    """
+    def find(n: str) -> Style | None:
+        for q in (qualifier, "values"):
+            for s in styles:
+                if s.name == n and s.qualifier == q:
+                    return s
+        return None
+
+    chain: list[str] = []
+    current = name
+    while current and current not in chain:
+        style = find(current)
+        if style is None:
+            if not chain:
+                return None
+            return OptOutResolution(None, None, None, chain, missing_parent=current)
+        chain.append(current)
+        if style.opt_out_value is not None:
+            return OptOutResolution(style.opt_out_value, style.opt_out, style.name, chain)
+        current = implicit_parent(style)
+    return OptOutResolution(None, None, None, chain)
 
 
 @dataclass
@@ -103,9 +157,10 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
 
 # --- res/values*/styles.xml -----------------------------------------------
 
-STYLE = re.compile(r'<style\s+name="([\w.]+)"[^>]*>(.*?)</style>', re.DOTALL)
+STYLE = re.compile(r'<style\s+name="([\w.]+)"([^>]*)>(.*?)</style>', re.DOTALL)
+STYLE_PARENT = re.compile(r'\bparent="([^"]*)"')
 OPT_OUT_ITEM = re.compile(
-    r'<item\s+name="' + re.escape(OPT_OUT_ATTR) + r'"\s*>\s*true\s*</item>'
+    r'<item\s+name="' + re.escape(OPT_OUT_ATTR) + r'"\s*>\s*(true|false)\s*</item>'
 )
 
 
@@ -113,15 +168,19 @@ def read_styles(text: str, name: str, qualifier: str, inputs: AppInputs) -> None
     inputs.styles_provided = True
     for m in STYLE.finditer(text):
         start_line = text.count("\n", 0, m.start()) + 1
-        body_offset = m.start(2)
-        opt = OPT_OUT_ITEM.search(m.group(2))
-        opt_clue = None
+        body_offset = m.start(3)
+        opt = OPT_OUT_ITEM.search(m.group(3))
+        opt_clue, opt_value = None, None
         if opt:
             line = text.count("\n", 0, body_offset + opt.start()) + 1
             opt_clue = Clue(name, line, text.splitlines()[line - 1])
+            opt_value = opt.group(1) == "true"
+        parent = STYLE_PARENT.search(m.group(2))
         inputs.styles.append(
             Style(m.group(1), qualifier, opt_clue,
-                  Clue(name, start_line, text.splitlines()[start_line - 1]))
+                  Clue(name, start_line, text.splitlines()[start_line - 1]),
+                  opt_out_value=opt_value,
+                  parent=parent.group(1) if parent else None)
         )
 
 

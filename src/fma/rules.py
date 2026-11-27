@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 from .evidence import Evidence, Spec, resolve
 from .retrieval import Retriever
-from .signals import AppInputs, Clue
+from .signals import AppInputs, Clue, resolve_opt_out
 from .versions import Release, check_range
 
 AFFECTED, NOT_AFFECTED, NEEDS_CHECK = "affected", "not_affected", "needs_check"
@@ -42,6 +42,9 @@ E = {
     "opt_out_works": Spec(
         "opt_out_works", "opt out edge-to-edge windowOptOutEdgeToEdgeEnforcement styles.xml NormalTheme style",
         "This modified style opts your app out", kinds=BC),
+    "opt_out_parent": Spec(
+        "opt_out_parent", "parent style child styles opt out modify the parent only windowOptOutEdgeToEdgeEnforcement",
+        "you can modify the parent only", kinds=BC),
     "opt_out_temporary": Spec(
         "opt_out_temporary", EDGE_QUERY + " workaround temporary migrate before",
         "Android plans for the workaround detailed here to be temporary", kinds=BC),
@@ -185,34 +188,58 @@ class Auditor:
                            "android:windowOptOutEdgeToEdgeEnforcement 항목이 있는지 확인하세요.")
             return None
         theme_name, theme_clue = inp.normal_theme or ("NormalTheme", None)
-        day = [s for s in inp.styles if s.name == theme_name and s.qualifier == "values"]
         clues = [theme_clue] if theme_clue else []
-        if not day:
+        day = resolve_opt_out(inp.styles, theme_name, "values")
+        if day is None:
             self.add("opt_out", title, NEEDS_CHECK,
                      f"앱이 쓰는 스타일 `{theme_name}`이 제공된 res/values/styles.xml에 없습니다.",
                      clues, check=f"`{theme_name}` 스타일 정의를 찾아 opt-out 항목을 확인하세요.")
             return None
-        style = day[0]
-        if style.opt_out:
+        own = next(s for s in inp.styles if s.name == theme_name and s.qualifier == "values")
+        inherited = day.source is not None and day.source != theme_name
+        if day.value:
             caveat = "" if inp.manifest_provided else " (AndroidManifest.xml을 받지 못해 이 스타일이 실제로 쓰이는지는 확인하지 않았습니다.)"
+            where = (f"`{theme_name}`이 부모 스타일 `{day.source}`에서 opt-out 항목을 상속받아"
+                     if inherited else f"`{theme_name}`에 opt-out 항목이 있어")
+            specs = [E["opt_out_works"], E["opt_out_temporary"]]
+            if inherited:
+                specs.insert(1, E["opt_out_parent"])
             self.add("opt_out", title, NOT_AFFECTED,
-                     f"`{theme_name}`에 opt-out 항목이 있어 Android 15 기기에서도 기존처럼 시스템 바 바깥에 그려집니다. "
+                     f"{where} Android 15 기기에서도 기존처럼 시스템 바 바깥에 그려집니다. "
                      "다만 문서는 이 방법을 임시 조치로 안내합니다." + caveat,
-                     clues + [style.opt_out], [E["opt_out_works"], E["opt_out_temporary"]],
+                     clues + ([own.clue] if inherited else []) + [day.clue], specs,
                      ["Android 15(API 35) 에뮬레이터에서 첫 화면 상단 콘텐츠가 상태바 아래로 들어가지 않는지 확인한다."])
-            night = [s for s in inp.styles if s.name == theme_name and s.qualifier.startswith("values-night")]
-            for s in night:
-                if not s.opt_out:
-                    self.add("opt_out_night", "다크 모드 스타일의 opt-out", NEEDS_CHECK,
-                             f"`{s.qualifier}/styles.xml`의 `{theme_name}`에는 opt-out 항목이 없습니다. "
-                             "Flutter 3.27 시점 문서는 다크 모드 스타일을 언급하지 않았고, 이후 문서에서 같은 항목을 넣으라는 안내가 추가됐습니다.",
-                             [s.clue], [E["opt_out_night"]],
-                             ["기기를 다크 모드로 바꾸고 Android 15 에뮬레이터에서 첫 화면 상단을 다시 확인한다."],
-                             check="다크 모드에서도 opt-out이 필요한지 확인하세요.")
+            for s in inp.styles:
+                if s.name != theme_name or not s.qualifier.startswith("values-night"):
+                    continue
+                night = resolve_opt_out(inp.styles, theme_name, s.qualifier)
+                if night and night.value:
+                    continue
+                self.add("opt_out_night", "다크 모드 스타일의 opt-out", NEEDS_CHECK,
+                         f"`{s.qualifier}/styles.xml`의 `{theme_name}`에는 opt-out 항목이 없고, 부모 스타일에서도 상속받지 않습니다. "
+                         "Flutter 3.27 시점 문서는 다크 모드 스타일을 언급하지 않았고, 이후 문서에서 같은 항목을 넣으라는 안내가 추가됐습니다.",
+                         [s.clue], [E["opt_out_night"]],
+                         ["기기를 다크 모드로 바꾸고 Android 15 에뮬레이터에서 첫 화면 상단을 다시 확인한다."],
+                         check="다크 모드에서도 opt-out이 필요한지 확인하세요.")
             return True
-        self.add("opt_out", title, AFFECTED,
-                 f"`{theme_name}`에 opt-out 항목이 없어 Android 15 이상 기기에서 앱이 edge-to-edge로 그려집니다.",
-                 clues + [style.clue], [E["edge_default"]],
+        if day.missing_parent:
+            self.add("opt_out", title, NEEDS_CHECK,
+                     f"`{theme_name}`의 부모 스타일 `{day.missing_parent}`이 제공된 styles.xml에 없어, "
+                     "opt-out 항목을 상속받는지 확인할 수 없습니다.",
+                     clues + [own.clue], [E["opt_out_parent"]],
+                     check=f"`{day.missing_parent}` 스타일 정의가 들어 있는 styles.xml을 함께 넣어 주세요.")
+            return None
+        if day.value is False:
+            reason = (f"opt-out 항목이 `false`로 설정되어 있어"
+                      + (f"(`{day.source}`에서 상속)" if inherited else "")
+                      + " Android 15 이상 기기에서 앱이 edge-to-edge로 그려집니다.")
+            extra = [day.clue]
+        else:
+            reason = (f"`{theme_name}`과 그 부모 스타일에 opt-out 항목이 없어 "
+                      "Android 15 이상 기기에서 앱이 edge-to-edge로 그려집니다.")
+            extra = []
+        self.add("opt_out", title, AFFECTED, reason,
+                 clues + [own.clue] + extra, [E["edge_default"]],
                  ["Android 15(API 35) 에뮬레이터에서 앱 화면이 상태바·내비게이션 바 뒤까지 그려지는지 확인한다."])
         return False
 

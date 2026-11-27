@@ -11,8 +11,8 @@ from fma.signals import AppInputs, discover, read_dart, read_gradle, read_manife
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 MANIFEST = (SAMPLES / "player_default/android/app/src/main/AndroidManifest.xml").read_text()
-STYLES_PLAIN = '<style name="NormalTheme" parent="x">\n</style>\n'
-STYLES_OPT_OUT = ('<style name="NormalTheme" parent="x">\n'
+STYLES_PLAIN = '<style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">\n</style>\n'
+STYLES_OPT_OUT = ('<style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">\n'
                   '  <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>\n</style>\n')
 
 

@@ -48,11 +48,12 @@ def test_styles_opt_out_and_qualifier():
     assert by_name["NormalTheme"].qualifier == "values-night"
 
 
-def test_styles_opt_out_false_is_not_opt_out():
+def test_styles_opt_out_false_is_recorded_as_false():
     inputs = AppInputs()
     read_styles('<style name="NormalTheme"><item name="android:windowOptOutEdgeToEdgeEnforcement">false</item></style>',
                 "styles.xml", "values", inputs)
-    assert inputs.styles[0].opt_out is None
+    assert inputs.styles[0].opt_out_value is False
+    assert inputs.styles[0].opt_out is not None
 
 
 def test_manifest_normal_theme():
