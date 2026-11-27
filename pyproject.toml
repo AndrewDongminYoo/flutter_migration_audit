@@ -1,0 +1,23 @@
+[project]
+name = "flutter-migration-audit"
+version = "0.1.0"
+description = "Read-only audit of what a Flutter upgrade changes for Android system bars and edge-to-edge, with versioned doc evidence."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+fma = "fma.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.11"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "fma"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,22 +1,72 @@
 # flutter_migration_audit
 
-Flutter 업그레이드 구간을 입력하면 공식 마이그레이션 문서에서 근거를 찾아 영향 조건, 테스트할 항목, 출처를 보여주는 도구입니다. 문서만으로 판단할 수 없으면 확인해야 할 설정을 알려 주고 멈춥니다.
+Flutter 업그레이드가 내 앱의 Android 시스템 바와 edge-to-edge 동작을 바꾸는지 판단하는 읽기 전용 CLI입니다. 현재·목표 Flutter 버전과 관련 설정·코드 몇 줄을 받아, 항목마다 다음 세 가지를 붙여 판단합니다.
 
-## 첫 버전 범위
+- 앱에서 찾은 단서 (파일과 줄 번호)
+- 목표 버전 시점의 공식 문서 근거 (인용문, 문서 판본, URL)
+- 직접 해 볼 테스트
 
-- 업그레이드 구간: Flutter 3.24 → 3.27
-- 주제: Android 화면 및 시스템 바 변경 (edge-to-edge, `SystemUiMode`, 상태바·내비게이션 바)
-- 검증 질문: 15개
-- 비교 대상: 키워드 검색, 임베딩 검색, 버전 필터를 붙인 검색
-- 제외: GitHub 연동, 코드 자동 수정
+판단은 `영향 있음`, `영향 없음`, `추가 확인 필요` 중 하나입니다. 입력이 부족하거나 목표 버전 문서에서 근거를 찾지 못하면 `추가 확인 필요`로 멈추고 무엇을 확인해야 하는지 알려 줍니다. 앱 파일은 읽기만 하고 고치지 않습니다.
 
-## 왜 버전이 중요한가
+## 범위
 
-docs.flutter.dev의 breaking change 문서는 발행 이후에도 계속 수정됩니다. 예를 들어 [Set default of `SystemUiMode` to edge-to-edge](https://docs.flutter.dev/release/breaking-changes/default-systemuimode-edge-to-edge)는 3.27과 함께 나왔지만, 2025년 6월 이후 Android 16 관련 내용이 추가되었습니다. 3.27 시점의 질문에 현재 문서를 그대로 쓰면 그 시점에는 없던 내용이 답에 섞일 수 있습니다. 그래서 이 프로젝트는 [flutter/website](https://github.com/flutter/website) 저장소에서 릴리스 날짜 기준으로 문서 스냅샷을 만들고, API 문서는 [flutter/flutter](https://github.com/flutter/flutter) 릴리스 태그의 dartdoc 주석에서 다시 만들어 검색 코퍼스로 사용합니다. 자세한 기준은 [docs/corpus.md](docs/corpus.md)에 있습니다.
+- 업그레이드 구간: Flutter 3.24.x → 3.27.x
+- 주제: Android 시스템 바와 edge-to-edge (`targetSdk`, opt-out 스타일, `SystemUiMode`, `SafeArea`·`AppBar`, 시스템 바 색상)
+- 입력: `android/app/build.gradle(.kts)`, `AndroidManifest.xml`, `res/values*/styles.xml`, Dart 파일. 프로젝트 전체가 아니라 일부만 넣어도 됩니다.
+- 제외: GitHub 연동, 코드 자동 수정, 다른 업그레이드 구간
 
-## 코퍼스 만들기
+## 사용법
 
 ```sh
+# 코퍼스 만들기 (한 번)
 uv run --python 3.12 scripts/fetch_snapshots.py
 uv run --python 3.12 scripts/fetch_api_docs.py
+
+# 디렉터리로 넣기
+uv run fma audit --from 3.24.5 --to 3.27.1 --input samples/player_default
+
+# 파일만 골라 넣기
+uv run fma audit --from 3.24.5 --to 3.27.1 path/to/build.gradle path/to/values/styles.xml path/to/main.dart
+
+# JSON 출력
+uv run fma audit --from 3.24.5 --to 3.27.1 --input samples/player_opt_out --json
 ```
+
+## 샘플: 같은 업그레이드, 다른 결과
+
+`samples/`의 두 앱은 Dart 코드와 Gradle 설정이 같고 `styles.xml`만 다릅니다. 둘 다 동영상 화면에서 `SystemUiMode.immersiveSticky`를 쓰고, `targetSdk`는 `flutter.targetSdkVersion`을 따릅니다.
+
+| 항목 | `player_default` | `player_opt_out` |
+| --- | --- | --- |
+| targetSdk 변화 (34 → 35) | 영향 있음 | 영향 있음 |
+| edge-to-edge opt-out | 영향 있음 (항목 없음) | 영향 없음 (항목 있음, 임시 조치) |
+| `immersiveSticky`, `manual` 모드 | 영향 있음 | 해당 없음 |
+| 시스템 바 영역 레이아웃 | 영향 있음 (SafeArea 없음) | 해당 없음 |
+
+`player_opt_out`은 opt-out이 적용되므로 그 뒤 항목은 확인하지 않습니다. 대신 문서가 이 방법을 임시 조치로 안내한다는 근거를 함께 보여 줍니다.
+
+## 비슷하지만 다른 버전의 문서
+
+edge-to-edge 마이그레이션 문서는 코퍼스에 세 가지 판본이 있습니다. 3.27 출시 전 판본, 3.27 시점 판본, 그리고 Android 16 내용이 추가된 현재 판본입니다. 판본 사이의 차이는 몇 문장에 불과해서, 버전 필터 없이 BM25로 검색하면 세 판본의 점수 차이가 2%도 나지 않고 1위는 3.27 판본이 아닙니다.
+
+| 질의 (opt-out 근거) | 점수 | 판본 |
+| --- | --- | --- |
+| 1위 | 60.54 | 현재 판본 |
+| 2위 | 59.64 | 3.27 판본 |
+| 3위 | 59.55 | 3.27 출시 전 판본 |
+
+현재 판본을 근거로 쓰면 답이 달라집니다. 3.27 판본은 opt-out이 "Android SDK 15+를 대상으로 하는 앱"에 적용된다고 썼지만, 현재 판본은 Android 16부터 opt-out이 불가능하다는 이유로 이를 "SDK 15"로 좁혔습니다. 그래서 근거마다 필요한 판본을 정해 두고, 검색 결과가 다른 판본이면 문장이 같아도 받지 않습니다(`src/fma/evidence.py`, `tests/test_version_guard.py`).
+
+예외는 하나 있습니다. 3.27 판본이 빠뜨린 다크 모드 스타일(`values-night`) 안내는 이후 판본에서 추가됐습니다. 이 경우에만 이후 판본을 인용하고, 출력에 "목표 버전 이후에 고쳐진 내용"이라고 표시합니다.
+
+## 문서
+
+- [docs/corpus.md](docs/corpus.md): 문서 스냅샷 기준, 판본별 차이, 버전 메타데이터의 한계
+
+## 테스트
+
+```sh
+uv run pytest
+```
+
+코퍼스(`data/raw/`)가 없으면 코퍼스가 필요한 테스트는 건너뜁니다.
