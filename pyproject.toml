@@ -4,19 +4,16 @@ version = "0.1.0"
 description = "Read-only audit of what a Flutter upgrade changes for Android system bars and edge-to-edge, with versioned doc evidence."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["fastembed>=0.9"]
 
 [project.scripts]
 fma = "fma.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
-eval = [
-    "fastembed>=0.9.1",
-]
 
 [build-system]
-requires = ["uv_build>=0.8,<0.11"]
+requires = ["uv_build>=0.8,<0.14"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]

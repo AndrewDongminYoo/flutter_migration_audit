@@ -6,11 +6,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from .corpus import CorpusMissing, default_index
+from .corpus import CorpusMissing
 from .report import to_json, to_text
+from .retrieval import DEFAULT, RETRIEVERS, get_retriever
 from .rules import audit
 from .signals import discover, read_paths
-from .versions import UnsupportedVersion
+from .versions import UnsupportedVersion, check_range
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,18 +26,28 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--input", type=Path, help="설정·코드 조각이 들어 있는 디렉터리")
     a.add_argument("files", nargs="*", type=Path,
                    help="build.gradle(.kts), AndroidManifest.xml, res/values*/styles.xml, *.dart")
+    a.add_argument("--retriever", choices=RETRIEVERS, default=DEFAULT,
+                   help=f"근거 후보를 찾는 검색 방식 (기본값: {DEFAULT})")
     a.add_argument("--json", action="store_true", help="JSON으로 출력")
+    sub.add_parser("index", help="임베딩 인덱스를 미리 만듭니다")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if bool(args.input) == bool(args.files):
-        print("--input 디렉터리와 파일 목록 중 하나만 넣어 주세요.", file=sys.stderr)
-        return 2
-    inputs = discover(args.input) if args.input else read_paths(args.files)
     try:
-        report = audit(args.current, args.target, inputs, default_index())
+        if args.command == "index":
+            retriever = get_retriever("embedding")
+            print(f"임베딩 인덱스 준비 완료: {retriever.path}")  # type: ignore[attr-defined]
+            return 0
+        if bool(args.input) == bool(args.files):
+            print("--input 디렉터리와 파일 목록 중 하나만 넣어 주세요.", file=sys.stderr)
+            return 2
+        # Reject unsupported versions before loading (or building) an index.
+        check_range(args.current, args.target)
+        inputs = discover(args.input) if args.input else read_paths(args.files)
+        report = audit(args.current, args.target, inputs, get_retriever(args.retriever))
+        report.retriever = args.retriever
     except (UnsupportedVersion, CorpusMissing) as e:
         print(str(e), file=sys.stderr)
         return 2
