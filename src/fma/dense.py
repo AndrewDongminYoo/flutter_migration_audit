@@ -55,7 +55,7 @@ class Dense:
         print(f"문서 {len(texts)}개 섹션을 임베딩합니다. 처음 한 번만 하며, 몇 분에서 15분 정도 걸립니다.",
               file=sys.stderr)
         started = time.time()
-        vecs = np.array(list(self.model.passage_embed(texts, batch_size=64, parallel=0)), dtype=np.float32)
+        vecs = np.array(list(self.model.passage_embed(texts, batch_size=64)), dtype=np.float32)
         matrix = vecs / np.linalg.norm(vecs, axis=1, keepdims=True)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         np.save(self.path, matrix)
