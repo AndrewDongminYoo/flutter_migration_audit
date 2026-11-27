@@ -166,7 +166,7 @@ def test_night_variant_of_parent_only(index, night_base_value, expect):
     report = run(index, day, night)
     assert finding(report, "opt_out").verdict == NOT_AFFECTED
     f = finding(report, "opt_out_night")
-    assert f.verdict == NEEDS_CHECK and expect in f.reason and "NormalTheme → Base" in f.reason
+    assert f.verdict == NEEDS_CHECK and expect in f.reason and "values/NormalTheme → values-night/Base" in f.reason
 
 
 def test_night_variant_of_parent_that_keeps_opt_out(index):
@@ -175,14 +175,21 @@ def test_night_variant_of_parent_that_keeps_opt_out(index):
     assert "opt_out_night" not in [f.key for f in run(index, day, night).findings]
 
 
-def test_compatible_qualifiers_follow_android_precedence():
-    from fma.signals import compatible_qualifiers
+def test_best_match_follows_android_precedence():
+    from fma.signals import best_match, device_config
 
-    available = {"values-night-v35", "values-night", "values-v35", "values-v36", "values-v31"}
-    assert compatible_qualifiers("values-night-v35", available) == [
-        "values-night-v35", "values-night", "values-v35", "values-v31", "values"]
-    assert compatible_qualifiers("values-night", available) == ["values-night", "values"]
-    assert compatible_qualifiers("values", available) == ["values"]
+    available = {"values", "values-night", "values-v35", "values-v36", "values-v31",
+                 "values-night-v35", "values-zh", "values-zh-rCN"}
+    # Night ranks above platform version; v36 never applies to an API 35 device.
+    assert best_match(available, device_config("values-night-v35")) == "values-night-v35"
+    assert best_match(available - {"values-night-v35"}, device_config("values-night")) == "values-night"
+    assert best_match(available, device_config("values")) == "values-v35"
+    assert best_match({"values", "values-v31"}, device_config("values")) == "values-v31"
+    # Locale ranks above night mode; an exact region match beats language only.
+    assert best_match({"values", "values-zh", "values-night"}, device_config("values-zh-night")) == "values-zh"
+    assert best_match(available, device_config("values-zh-rCN")) == "values-zh-rCN"
+    assert best_match({"values-zh"}, device_config("values-zh-rTW")) == "values-zh"
+    assert best_match({"values-ko"}, device_config("values")) is None
 
 
 def test_night_v35_theme_uses_night_parent_before_default(index):
@@ -205,3 +212,70 @@ def test_night_v35_theme_uses_night_parent_before_default(index):
     night = [f for f in report.findings if f.key == "opt_out_night"]
     assert night and all(f.verdict == NEEDS_CHECK for f in night)
     assert any("values-night-v35" in f.reason and "`false`" in f.reason for f in night)
+
+
+# --- local adversarial review follow-ups ---------------------------------------
+
+def _inputs(*files):
+    inputs = AppInputs()
+    read_gradle("targetSdk = flutter.targetSdkVersion", "build.gradle", inputs)
+    read_manifest(MANIFEST.format("NormalTheme"), "AndroidManifest.xml", inputs)
+    for qualifier, text in files:
+        read_styles(text, f"{qualifier}/styles.xml", qualifier, inputs)
+    return inputs
+
+
+def test_values_v35_day_variant_decides_the_main_verdict(index):
+    inputs = _inputs(("values", xml(("Base", FRAMEWORK, "true"), ("NormalTheme", "@style/Base", None))),
+                     ("values-v35", xml(("Base", FRAMEWORK, "false"))))
+    f = finding(audit("3.24.0", "3.27.0", inputs, index), "opt_out")
+    assert f.verdict == AFFECTED and "`false`" in f.reason
+
+
+def test_locale_variant_outranks_night(index):
+    inputs = _inputs(("values", xml(("Base", FRAMEWORK, "true"), ("NormalTheme", "@style/Base", None))),
+                     ("values-zh", xml(("Base", FRAMEWORK, "false"))),
+                     ("values-night", xml(("Base", FRAMEWORK, "true"))),
+                     ("values-zh-night", xml(("NormalTheme", "@style/Base", None))))
+    assert resolve_opt_out(inputs.styles, "NormalTheme", "values-zh-night").value is False
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    assert finding(report, "opt_out").verdict == NOT_AFFECTED
+    night = [f for f in report.findings if f.key == "opt_out_night"]
+    assert any("values-zh-night" in f.reason and "values-zh/Base" in f.reason for f in night)
+    variant = [f for f in report.findings if f.key == "opt_out_variant"]
+    assert any("values-zh" in f.title for f in variant)
+
+
+def test_commented_out_style_is_ignored():
+    inputs = AppInputs()
+    read_styles(
+        "<resources>\n"
+        "<!-- <style name=\"NormalTheme\"><item name=\"android:windowOptOutEdgeToEdgeEnforcement\">true</item></style> -->\n"
+        f"<style name=\"NormalTheme\" parent=\"{FRAMEWORK}\"></style>\n"
+        "</resources>\n", "values/styles.xml", "values", inputs)
+    assert [(s.name, s.opt_out_value, s.clue.line) for s in inputs.styles] == [("NormalTheme", None, 3)]
+
+
+def test_self_closing_style_is_read():
+    inputs = AppInputs()
+    read_styles(f"<resources>\n<style name=\"NormalTheme\" parent=\"{FRAMEWORK}\"/>\n</resources>\n",
+                "values/styles.xml", "values", inputs)
+    assert [(s.name, s.parent, s.clue.line) for s in inputs.styles] == [("NormalTheme", FRAMEWORK, 2)]
+
+
+def test_snippet_without_root_and_single_quotes():
+    inputs = AppInputs()
+    read_styles("<style name='Base'>\n  <item name='android:windowOptOutEdgeToEdgeEnforcement'> true </item>\n</style>\n"
+                "<style parent='@style/Base' name='NormalTheme'/>\n", "values/styles.xml", "values", inputs)
+    by_name = {s.name: s for s in inputs.styles}
+    assert by_name["Base"].opt_out_value is True and by_name["Base"].opt_out.line == 2
+    assert by_name["NormalTheme"].parent == "@style/Base"
+
+
+def test_malformed_snippet_falls_back_to_scanner():
+    inputs = AppInputs()
+    # Unclosed <resources> and a stray '&' make expat fail.
+    read_styles("<resources>\n<!-- old & unused -->\n<style name=\"NormalTheme\" parent=\"@style/Base\">\n"
+                "  <item name=\"android:windowOptOutEdgeToEdgeEnforcement\">true</item>\n</style>\n& \n",
+                "values/styles.xml", "values", inputs)
+    assert [(s.name, s.opt_out_value, s.opt_out.line) for s in inputs.styles] == [("NormalTheme", True, 4)]

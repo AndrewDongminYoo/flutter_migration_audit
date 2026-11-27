@@ -76,54 +76,108 @@ def implicit_parent(style: Style) -> str | None:
     return None
 
 
-def qualifier_parts(qualifier: str) -> tuple[frozenset[str], int | None]:
-    """Split `values-night-v35` into ({"night"}, 35)."""
-    others, version = set(), None
-    for part in qualifier.split("-")[1:]:
-        if re.fullmatch(r"v\d+", part):
-            version = int(part[1:])
+# Android resource qualifiers in precedence order. A resource directory's
+# qualifiers must all match the device configuration; among the matching
+# directories, Android eliminates candidates one qualifier type at a time in
+# this order.
+# https://developer.android.com/guide/topics/resources/providing-resources#BestMatch
+QUALIFIER_KINDS: list[tuple[str, re.Pattern]] = [
+    (kind, re.compile(pattern)) for kind, pattern in [
+        ("mcc", r"mcc\d+"), ("mnc", r"mnc\d+"),
+        ("layoutdir", r"ldrtl|ldltr"),
+        ("sw", r"sw\d+dp"), ("w", r"w\d+dp"), ("h", r"h\d+dp"),
+        ("size", r"small|normal|large|xlarge"), ("long", r"long|notlong"),
+        ("round", r"round|notround"), ("gamut", r"widecg|nowidecg"), ("hdr", r"highdr|lowdr"),
+        ("orientation", r"port|land"),
+        ("uimode", r"car|desk|television|appliance|watch|vrheadset"),
+        ("night", r"night|notnight"),
+        ("density", r"ldpi|mdpi|hdpi|xhdpi|xxhdpi|xxxhdpi|nodpi|tvdpi|anydpi|\d+dpi"),
+        ("touch", r"notouch|finger"), ("keys", r"keysexposed|keyshidden|keyssoft"),
+        ("input", r"nokeys|qwerty|12key"), ("navexp", r"navexposed|navhidden"),
+        ("nav", r"nonav|dpad|trackball|wheel"),
+        ("version", r"v\d+"),
+        ("locale", r"[a-z]{2,3}|r[A-Z]{2}|b\+[\w+]+"),
+    ]
+]
+PRECEDENCE = ["mcc", "mnc", "locale", "layoutdir", "sw", "w", "h", "size", "long", "round",
+              "gamut", "hdr", "orientation", "uimode", "night", "density", "touch", "keys",
+              "input", "navexp", "nav", "version"]
+# The audit looks at Android 15 devices, so every configuration it resolves
+# runs API 35. Directories for later versions (values-v36) never apply.
+DEVICE_API = 35
+
+
+def qualifier_parts(qualifier: str) -> dict[str, str | int]:
+    """Parse `values-zh-rCN-night-v35` into {"locale": "zh-rCN", "night": "night", "version": 35}."""
+    parts: dict[str, str | int] = {}
+    for token in qualifier.split("-")[1:]:
+        for kind, pattern in QUALIFIER_KINDS:
+            if pattern.fullmatch(token):
+                if kind == "version":
+                    parts[kind] = int(token[1:])
+                elif kind == "locale" and "locale" in parts:
+                    parts[kind] = f"{parts[kind]}-{token}"
+                else:
+                    parts[kind] = token
+                break
         else:
-            others.add(part)
-    return frozenset(others), version
+            parts[f"unknown:{token}"] = token
+    return parts
 
 
-def compatible_qualifiers(target: str, available: set[str]) -> list[str]:
-    """Resource directories Android may pick for `target`, best match first.
+def device_config(qualifier: str) -> dict[str, str | int]:
+    config = qualifier_parts(qualifier)
+    config["version"] = DEVICE_API
+    return config
 
-    A directory is compatible when its qualifiers are a subset of the target's
-    and its platform version is not higher. Night mode ranks above platform
-    version in Android's precedence, so `values-night` beats `values-v35` for
-    a `values-night-v35` configuration.
-    https://developer.android.com/guide/topics/resources/providing-resources#BestMatch
-    """
-    t_others, t_version = qualifier_parts(target)
-    out = []
-    for q in available | {"values"}:
-        others, version = qualifier_parts(q)
-        if not others <= t_others:
+
+def _matches(directory: dict, config: dict) -> bool:
+    for kind, value in directory.items():
+        if kind == "version":
+            if value > config["version"]:
+                return False
+        elif kind == "locale":
+            want = config.get("locale")
+            if not isinstance(want, str) or not (want == value or want.split("-")[0] == value):
+                return False
+        elif config.get(kind) != value:
+            return False
+    return True
+
+
+def best_match(qualifiers: set[str], config: dict) -> str | None:
+    """Android's best-matching resource directory among `qualifiers`."""
+    candidates = [(q, qualifier_parts(q)) for q in qualifiers]
+    candidates = [(q, d) for q, d in candidates if _matches(d, config)]
+    for kind in PRECEDENCE:
+        if not any(kind in d for _, d in candidates):
             continue
-        if version is not None and (t_version is None or version > t_version):
-            continue
-        out.append(q)
-    return sorted(out, key=lambda q: (-len(qualifier_parts(q)[0]), -(qualifier_parts(q)[1] or 0)))
+        with_kind = [(q, d) for q, d in candidates if kind in d]
+        if kind == "version":
+            top = max(d["version"] for _, d in with_kind)
+            with_kind = [(q, d) for q, d in with_kind if d["version"] == top]
+        elif kind == "locale":
+            exact = [(q, d) for q, d in with_kind if d["locale"] == config.get("locale")]
+            with_kind = exact or with_kind
+        candidates = with_kind
+    return candidates[0][0] if candidates else None
 
 
 def resolve_opt_out(styles: list[Style], name: str, qualifier: str) -> OptOutResolution | None:
     """Follow the style's parents until one sets the opt-out item.
 
-    `qualifier` is the configuration to resolve for (`values`, `values-night`,
-    `values-night-v35`). Each style in the chain, parents included, is looked
-    up in the best-matching compatible resource directory, as Android does.
-    Returns None if the requested style itself is not provided.
+    `qualifier` names the device configuration to resolve for, such as
+    `values` (default), `values-night`, or `values-zh-night`, on an API 35
+    device. Each style in the chain, parents included, is taken from its own
+    best-matching resource directory, as Android does. Returns None if the
+    requested style itself is not provided.
     """
-    order = compatible_qualifiers(qualifier, {s.qualifier for s in styles})
+    config = device_config(qualifier)
 
     def find(n: str) -> Style | None:
-        for q in order:
-            for s in styles:
-                if s.name == n and s.qualifier == q:
-                    return s
-        return None
+        defined = {s.qualifier for s in styles if s.name == n}
+        q = best_match(defined, config)
+        return next((s for s in styles if s.name == n and s.qualifier == q), None)
 
     chain: list[str] = []
     resolved: list[Style] = []
@@ -201,31 +255,96 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
 
 # --- res/values*/styles.xml -----------------------------------------------
 
-STYLE = re.compile(r'<style\s+name="([\w.]+)"([^>]*)>(.*?)</style>', re.DOTALL)
-STYLE_PARENT = re.compile(r'\bparent="([^"]*)"')
-OPT_OUT_ITEM = re.compile(
-    r'<item\s+name="' + re.escape(OPT_OUT_ATTR) + r'"\s*>\s*([^<]*?)\s*</item>'
-)
+XML_DECL = re.compile(r"<\?xml[^>]*\?>")
+XML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+STYLE_TAG = re.compile(r"<style\b([^>]*?)(/?)>", re.DOTALL)
+STYLE_END = re.compile(r"</style\s*>")
+ATTR = re.compile(r"""([\w:]+)\s*=\s*(?:"([^"]*)"|'([^']*)')""")
+ITEM = re.compile(r"<item\b([^>]*)>(.*?)</item\s*>", re.DOTALL)
+
+
+def _blank(m: re.Match) -> str:
+    """Replace matched text with spaces, keeping newlines so line numbers hold."""
+    return re.sub(r"[^\n]", " ", m.group(0))
+
+
+def _parse_styles_xml(text: str) -> list[dict] | None:
+    """Parse with expat. Snippets may lack a single root, so wrap them."""
+    import xml.parsers.expat
+
+    body = XML_DECL.sub(_blank, text)
+    found: list[dict] = []
+    stack: list[dict] = []
+    item: dict | None = None
+    parser = xml.parsers.expat.ParserCreate()
+
+    def start(tag, attrs):
+        nonlocal item
+        if tag == "style" and "name" in attrs:
+            stack.append({"name": attrs["name"], "parent": attrs.get("parent"),
+                          "line": parser.CurrentLineNumber, "item": None})
+        elif tag == "item" and stack and attrs.get("name") == OPT_OUT_ATTR:
+            item = {"line": parser.CurrentLineNumber, "text": ""}
+
+    def data(chunk):
+        if item is not None:
+            item["text"] += chunk
+
+    def end(tag):
+        nonlocal item
+        if tag == "item" and item is not None:
+            stack[-1]["item"] = item
+            item = None
+        elif tag == "style" and stack:
+            found.append(stack.pop())
+
+    parser.StartElementHandler, parser.CharacterDataHandler, parser.EndElementHandler = start, data, end
+    try:
+        parser.Parse(f"<fma-root>{body}</fma-root>", True)
+    except xml.parsers.expat.ExpatError:
+        return None
+    return found
+
+
+def _scan_styles_regex(text: str) -> list[dict]:
+    """Fallback for snippets that are not well-formed XML."""
+    body = XML_COMMENT.sub(_blank, text)
+    found = []
+    for m in STYLE_TAG.finditer(body):
+        attrs = {a.group(1): a.group(2) if a.group(2) is not None else a.group(3)
+                 for a in ATTR.finditer(m.group(1))}
+        if "name" not in attrs:
+            continue
+        style = {"name": attrs["name"], "parent": attrs.get("parent"),
+                 "line": body.count("\n", 0, m.start()) + 1, "item": None}
+        if not m.group(2):  # not self-closing
+            close = STYLE_END.search(body, m.end())
+            inner_end = close.start() if close else len(body)
+            for it in ITEM.finditer(body, m.end(), inner_end):
+                it_attrs = {a.group(1): a.group(2) if a.group(2) is not None else a.group(3)
+                            for a in ATTR.finditer(it.group(1))}
+                if it_attrs.get("name") == OPT_OUT_ATTR:
+                    style["item"] = {"line": body.count("\n", 0, it.start()) + 1, "text": it.group(2)}
+                    break
+        found.append(style)
+    return found
 
 
 def read_styles(text: str, name: str, qualifier: str, inputs: AppInputs) -> None:
     inputs.styles_provided = True
-    for m in STYLE.finditer(text):
-        start_line = text.count("\n", 0, m.start()) + 1
-        body_offset = m.start(3)
-        opt = OPT_OUT_ITEM.search(m.group(3))
+    lines = text.splitlines()
+    parsed = _parse_styles_xml(text)
+    if parsed is None:
+        parsed = _scan_styles_regex(text)
+    for st in sorted(parsed, key=lambda s: s["line"]):
         opt_clue, opt_value, opt_raw = None, None, None
-        if opt:
-            line = text.count("\n", 0, body_offset + opt.start()) + 1
-            opt_clue = Clue(name, line, text.splitlines()[line - 1])
-            opt_raw = opt.group(1)
-            opt_value = {"true": True, "false": False}.get(opt_raw)
-        parent = STYLE_PARENT.search(m.group(2))
+        if st["item"]:
+            raw = st["item"]["text"].strip()
+            opt_clue = Clue(name, st["item"]["line"], lines[st["item"]["line"] - 1])
+            opt_raw, opt_value = raw, {"true": True, "false": False}.get(raw)
         inputs.styles.append(
-            Style(m.group(1), qualifier, opt_clue,
-                  Clue(name, start_line, text.splitlines()[start_line - 1]),
-                  opt_out_value=opt_value, opt_out_raw=opt_raw,
-                  parent=parent.group(1) if parent else None)
+            Style(st["name"], qualifier, opt_clue, Clue(name, st["line"], lines[st["line"] - 1]),
+                  opt_out_value=opt_value, opt_out_raw=opt_raw, parent=st["parent"])
         )
 
 
