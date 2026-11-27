@@ -107,14 +107,19 @@ PRECEDENCE = ["mcc", "mnc", "locale", "layoutdir", "sw", "w", "h", "size", "long
 DEVICE_API = 35
 
 
+# Qualifiers that name a minimum value: a directory applies when the device
+# value is at least this, and the largest such threshold wins.
+THRESHOLD_KINDS = {"version", "sw", "w", "h"}
+
+
 def qualifier_parts(qualifier: str) -> dict[str, str | int]:
     """Parse `values-zh-rCN-night-v35` into {"locale": "zh-rCN", "night": "night", "version": 35}."""
     parts: dict[str, str | int] = {}
     for token in qualifier.split("-")[1:]:
         for kind, pattern in QUALIFIER_KINDS:
             if pattern.fullmatch(token):
-                if kind == "version":
-                    parts[kind] = int(token[1:])
+                if kind in THRESHOLD_KINDS:
+                    parts[kind] = int(re.sub(r"\D", "", token))
                 elif kind == "locale" and "locale" in parts:
                     parts[kind] = f"{parts[kind]}-{token}"
                 else:
@@ -131,10 +136,23 @@ def device_config(qualifier: str) -> dict[str, str | int]:
     return config
 
 
+def config_name(config: dict) -> str:
+    """Render a device configuration as a resource directory name (version omitted)."""
+    tokens = []
+    for kind in PRECEDENCE:
+        if kind == "version" or kind not in config:
+            continue
+        value = config[kind]
+        tokens.append(f"{kind}{value}dp" if kind in ("sw", "w", "h") else str(value))
+    tokens += [str(v) for k, v in config.items() if k.startswith("unknown:")]
+    return "-".join(["values", *tokens])
+
+
 def _matches(directory: dict, config: dict) -> bool:
     for kind, value in directory.items():
-        if kind == "version":
-            if value > config["version"]:
+        if kind in THRESHOLD_KINDS:
+            have = config.get(kind)
+            if not isinstance(have, int) or value > have:
                 return False
         elif kind == "locale":
             want = config.get("locale")
@@ -153,9 +171,9 @@ def best_match(qualifiers: set[str], config: dict) -> str | None:
         if not any(kind in d for _, d in candidates):
             continue
         with_kind = [(q, d) for q, d in candidates if kind in d]
-        if kind == "version":
-            top = max(d["version"] for _, d in with_kind)
-            with_kind = [(q, d) for q, d in with_kind if d["version"] == top]
+        if kind in THRESHOLD_KINDS:
+            top = max(d[kind] for _, d in with_kind)
+            with_kind = [(q, d) for q, d in with_kind if d[kind] == top]
         elif kind == "locale":
             exact = [(q, d) for q, d in with_kind if d["locale"] == config.get("locale")]
             with_kind = exact or with_kind
@@ -163,7 +181,7 @@ def best_match(qualifiers: set[str], config: dict) -> str | None:
     return candidates[0][0] if candidates else None
 
 
-def resolve_opt_out(styles: list[Style], name: str, qualifier: str) -> OptOutResolution | None:
+def resolve_opt_out(styles: list[Style], name: str, qualifier: str | dict) -> OptOutResolution | None:
     """Follow the style's parents until one sets the opt-out item.
 
     `qualifier` names the device configuration to resolve for, such as
@@ -172,7 +190,7 @@ def resolve_opt_out(styles: list[Style], name: str, qualifier: str) -> OptOutRes
     best-matching resource directory, as Android does. Returns None if the
     requested style itself is not provided.
     """
-    config = device_config(qualifier)
+    config = device_config(qualifier) if isinstance(qualifier, str) else qualifier
 
     def find(n: str) -> Style | None:
         defined = {s.qualifier for s in styles if s.name == n}

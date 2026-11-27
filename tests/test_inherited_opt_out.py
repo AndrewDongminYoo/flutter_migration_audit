@@ -240,10 +240,11 @@ def test_locale_variant_outranks_night(index):
     assert resolve_opt_out(inputs.styles, "NormalTheme", "values-zh-night").value is False
     report = audit("3.24.0", "3.27.0", inputs, index)
     assert finding(report, "opt_out").verdict == NOT_AFFECTED
-    night = [f for f in report.findings if f.key == "opt_out_night"]
-    assert any("values-zh-night" in f.reason and "values-zh/Base" in f.reason for f in night)
-    variant = [f for f in report.findings if f.key == "opt_out_variant"]
-    assert any("values-zh" in f.title for f in variant)
+    # values-zh already loses the opt-out through values-zh/Base, so the
+    # larger values-zh-night configuration is not reported again.
+    variants = [f for f in report.findings if f.key in ("opt_out_variant", "opt_out_night")]
+    assert [f.title for f in variants] == ["`values-zh` 설정의 opt-out"]
+    assert "values-zh/Base" in variants[0].reason and "`false`" in variants[0].reason
 
 
 def test_commented_out_style_is_ignored():
@@ -292,3 +293,49 @@ def test_language_outranks_orientation_and_night(index):
     report = audit("3.24.0", "3.27.0", inputs, index)
     assert finding(report, "opt_out").verdict == NOT_AFFECTED
     assert any(f.key == "opt_out_night" and "values-en-land-night-v35" in f.reason for f in report.findings)
+
+
+# --- Codex review round 3 on PR #19 ------------------------------------------
+
+def test_theme_only_in_version_qualified_directory_does_not_crash(index):
+    """comment 4718657075: NormalTheme only in values-v21."""
+    inputs = _inputs(("values-v21", xml(("NormalTheme", FRAMEWORK, None))))
+    f = finding(audit("3.24.0", "3.27.0", inputs, index), "opt_out")
+    assert f.verdict == AFFECTED and "values-v21/styles.xml" in f.clues[1].file
+
+
+def test_smallest_width_is_a_threshold(index):
+    """comment 4718657083: values-sw720dp/NormalTheme → values-sw600dp/Base."""
+    inputs = _inputs(("values", xml(("Base", FRAMEWORK, "true"), ("NormalTheme", "@style/Base", "true"))),
+                     ("values-sw600dp", xml(("Base", FRAMEWORK, "false"))),
+                     ("values-sw720dp", xml(("NormalTheme", "@style/Base", None))))
+    r = resolve_opt_out(inputs.styles, "NormalTheme", "values-sw720dp")
+    assert (r.value, [s.qualifier for s in r.styles]) == (False, ["values-sw720dp", "values-sw600dp"])
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    assert finding(report, "opt_out").verdict == NOT_AFFECTED
+    assert [f.title for f in report.findings if f.key == "opt_out_variant"] == ["`values-sw720dp` 설정의 opt-out"]
+
+
+def test_combinations_of_supplied_qualifiers_are_checked(index):
+    """comment 4718657091: English night mode combines values-en and values-night."""
+    inputs = _inputs(("values", xml(("NormalTheme", FRAMEWORK, "true"), ("Base", FRAMEWORK, "true"))),
+                     ("values-en", xml(("NormalTheme", "@style/Base", None))),
+                     ("values-night", xml(("Base", FRAMEWORK, "false"))))
+    for q in ("values", "values-en", "values-night"):
+        assert resolve_opt_out(inputs.styles, "NormalTheme", q).value is True
+    assert resolve_opt_out(inputs.styles, "NormalTheme", "values-en-night").value is False
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    assert finding(report, "opt_out").verdict == NOT_AFFECTED
+    night = [f for f in report.findings if f.key == "opt_out_night"]
+    assert len(night) == 1 and "`values-en-night`" in night[0].reason
+
+
+def test_too_many_combinations_reports_uncertainty(index, monkeypatch):
+    from fma import rules
+
+    monkeypatch.setattr(rules.Auditor, "MAX_CONFIGS", 3)
+    inputs = _inputs(("values", xml(("NormalTheme", FRAMEWORK, "true"))),
+                     ("values-en", xml(("Other", FRAMEWORK, None))),
+                     ("values-night", xml(("Other", FRAMEWORK, None))))
+    f = finding(audit("3.24.0", "3.27.0", inputs, index), "opt_out_variant")
+    assert f.verdict == NEEDS_CHECK and "4개" in f.reason
