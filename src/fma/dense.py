@@ -9,6 +9,7 @@ cached under data/index/ and keyed by model, chunk ids, and chunk text.
 from __future__ import annotations
 
 import hashlib
+import os
 import sys
 import time
 from collections.abc import Set
@@ -22,6 +23,14 @@ MODEL = "BAAI/bge-small-en-v1.5"
 CACHE = ROOT / "data" / "index"
 # The model reads at most 512 tokens; cut early to skip tokenizing the rest.
 MAX_CHARS = 2500
+# ONNX Runtime uses every core by default. Set FMA_EMBED_THREADS to leave
+# room for other work on a busy machine; it changes speed, not results.
+THREADS_ENV = "FMA_EMBED_THREADS"
+
+
+def embed_threads() -> int | None:
+    value = os.environ.get(THREADS_ENV, "").strip()
+    return int(value) if value.isdigit() and int(value) > 0 else None
 
 
 def passage_text(chunk: Chunk) -> str:
@@ -56,13 +65,15 @@ class Dense:
 
         from fastembed import TextEmbedding
 
-        self.model = TextEmbedding(model)
+        self.model = TextEmbedding(model, threads=embed_threads())
         self.matrix = np.load(self.path) if self.path.exists() else self._build()
 
     def _build(self) -> np.ndarray:
         texts = [passage_text(c) for c in self.chunks]
+        threads = embed_threads()
         print(
-            f"문서 {len(texts)}개 섹션을 임베딩합니다. 처음 한 번만 하며, 몇 분에서 15분 정도 걸립니다.",
+            f"문서 {len(texts)}개 섹션을 임베딩합니다. 처음 한 번만 하며 몇 분 걸립니다"
+            + (f" (스레드 {threads}개)." if threads else "."),
             file=sys.stderr,
         )
         started = time.time()
