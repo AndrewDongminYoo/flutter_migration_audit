@@ -3,7 +3,9 @@
 The comparison in docs/retrieval-comparison.md found that embedding search
 with a version filter ranks the right revision first more often than BM25.
 Embedding the whole corpus takes minutes on a laptop CPU, so the matrix is
-cached under data/index/ and keyed by model, chunk ids, and chunk text.
+cached under data/index/ and keyed by model, chunk ids, and chunk text. The
+CLI index is cached in one part per snapshot, so a new snapshot only adds a
+part.
 """
 
 from __future__ import annotations
@@ -47,6 +49,17 @@ def cache_path(
     return cache_dir / f"{model.replace('/', '__')}-{key}.npy"
 
 
+def index_parts(chunks: list[Chunk], by_snapshot: bool) -> list[list[int]]:
+    """Row numbers of each cached part. Split by snapshot, a new snapshot only
+    adds a part, and the parts for the other snapshots are reused."""
+    if not by_snapshot:
+        return [list(range(len(chunks)))]
+    parts: dict[str, list[int]] = {}
+    for i, c in enumerate(chunks):
+        parts.setdefault(c.snapshot_id, []).append(i)
+    return list(parts.values())
+
+
 class Dense:
     def __init__(
         self,
@@ -54,25 +67,39 @@ class Dense:
         model: str = MODEL,
         cache_dir: Path = CACHE,
         build: bool = True,
+        by_snapshot: bool = False,
     ):
         self.chunks = chunks
         self.model_name = model
-        self.path = cache_path(chunks, model, cache_dir)
+        self.parts = index_parts(chunks, by_snapshot)
+        self.paths = [
+            cache_path([chunks[i] for i in rows], model, cache_dir)
+            for rows in self.parts
+        ]
+        missing = [p for p in self.paths if not p.exists()]
         # Check the index before loading the model: loading may download it,
         # and a caller that only wants an existing index must not pay for that.
-        if not self.path.exists() and not build:
-            raise FileNotFoundError(self.path)
+        if missing and not build:
+            raise FileNotFoundError(missing[0])
 
         from fastembed import TextEmbedding
 
         self.model = TextEmbedding(model, threads=embed_threads())
-        self.matrix = np.load(self.path) if self.path.exists() else self._build()
+        matrices = [
+            np.load(path) if path.exists() else self._build(rows, path)
+            for rows, path in zip(self.parts, self.paths, strict=False)
+        ]
+        self.matrix = np.empty((len(chunks), matrices[0].shape[1]), dtype=np.float32)
+        for rows, matrix in zip(self.parts, matrices, strict=False):
+            self.matrix[rows] = matrix
 
-    def _build(self) -> np.ndarray:
-        texts = [passage_text(c) for c in self.chunks]
+    def _build(self, rows: list[int], path: Path) -> np.ndarray:
+        texts = [passage_text(self.chunks[i]) for i in rows]
+        snapshots = sorted({self.chunks[i].snapshot_id for i in rows})
+        label = snapshots[0] if len(snapshots) == 1 else "전체"
         threads = embed_threads()
         print(
-            f"문서 {len(texts)}개 섹션을 임베딩합니다. 처음 한 번만 하며 몇 분 걸립니다"
+            f"문서 {len(texts)}개 섹션({label})을 임베딩합니다. 처음 한 번만 하며 몇 분 걸립니다"
             + (f" (스레드 {threads}개)." if threads else "."),
             file=sys.stderr,
         )
@@ -81,10 +108,10 @@ class Dense:
             list(self.model.passage_embed(texts, batch_size=64)), dtype=np.float32
         )
         matrix = vecs / np.linalg.norm(vecs, axis=1, keepdims=True)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        np.save(self.path, matrix)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.save(path, matrix)
         print(
-            f"임베딩 완료: {time.time() - started:.0f}초, {self.path.name}",
+            f"임베딩 완료: {time.time() - started:.0f}초, {path.name}",
             file=sys.stderr,
         )
         return matrix

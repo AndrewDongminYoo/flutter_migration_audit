@@ -15,7 +15,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # A build with no cache at all embeds every snapshot part; the parts are
+    # cached separately, so later runs rebuild only a new snapshot.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -34,16 +36,19 @@ jobs:
           uv run --python 3.12 scripts/fetch_api_docs.py
           git diff --exit-code -- data/manifest
 
-      # The index file name is a hash of the model and the embedded sections,
-      # so it changes exactly when the index must be rebuilt.
+      # The CLI index is one file per snapshot, named by a hash of the model
+      # and the embedded sections. The cache key combines the file names, so
+      # it changes exactly when some part must be rebuilt.
       - name: Locate embedding index
         id: index
         run: |
-          name=$(uv run python -c 'from fma.corpus import load_chunks; from fma.dense import cache_path; from fma.retrieval import cli_chunks; print(cache_path(cli_chunks(load_chunks())).name)')
-          echo "name=$name" >> "$GITHUB_OUTPUT"
+          uv run python -c 'from fma.retrieval import cli_index_files; print("\n".join(cli_index_files()))' > "$RUNNER_TEMP/index-files"
+          cat "$RUNNER_TEMP/index-files"
+          echo "key=$(sha256sum "$RUNNER_TEMP/index-files" | cut -c1-16)" >> "$GITHUB_OUTPUT"
           echo "FASTEMBED_CACHE_PATH=$HOME/.cache/fastembed" >> "$GITHUB_ENV"
 
-      # A partial hit restores the model, so only the index is rebuilt.
+      # A partial hit restores the model and the parts that did not change,
+      # so only the changed parts are rebuilt.
       - name: Restore embedding index
         id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -51,16 +56,16 @@ jobs:
           path: |
             data/index
             ~/.cache/fastembed
-          key: embedding-${{ steps.index.outputs.name }}
+          key: embedding-${{ steps.index.outputs.key }}
           restore-keys: embedding-
 
       - name: Build embedding index
         if: steps.cache.outputs.cache-hit != 'true'
-        env:
-          INDEX_NAME: ${{ steps.index.outputs.name }}
         run: |
           uv run fma index
-          find data/index -name '*.npy' ! -name "$INDEX_NAME" -delete
+          find data/index -name '*.npy' | while read -r f; do
+            grep -qxF "$(basename "$f")" "$RUNNER_TEMP/index-files" || rm "$f"
+          done
 
       # Saved before the tests, so a failing test does not discard the build.
       - name: Save embedding index
@@ -70,7 +75,7 @@ jobs:
           path: |
             data/index
             ~/.cache/fastembed
-          key: embedding-${{ steps.index.outputs.name }}
+          key: embedding-${{ steps.index.outputs.key }}
 
       - name: Test
         env:

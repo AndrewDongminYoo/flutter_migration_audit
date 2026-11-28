@@ -50,7 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "index":
             retriever = get_retriever("embedding")
-            print(f"임베딩 인덱스 준비 완료: {retriever.path}")  # type: ignore[attr-defined]
+            for path in retriever.paths:  # type: ignore[attr-defined]
+                print(f"임베딩 인덱스 준비 완료: {path}")
             return 0
         if bool(args.input) == bool(args.files):
             print(

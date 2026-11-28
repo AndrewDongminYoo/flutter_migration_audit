@@ -9,9 +9,8 @@ import pytest
 
 from fma import cli
 from fma.cli import main
-from fma.corpus import load_chunks
 from fma.evidence import resolve
-from fma.retrieval import cli_chunks, cli_scope
+from fma.retrieval import cli_chunks, cli_dense, cli_scope
 from fma.rules import E, audit, mode_spec
 from fma.signals import discover
 from fma.versions import release_for
@@ -27,11 +26,9 @@ REQUIRE_INDEX_ENV = "FMA_REQUIRE_EMBEDDING_INDEX"
 
 @pytest.fixture(scope="session")
 def dense(index):
-    from fma.dense import Dense
-
     try:
         # Never build in tests: a cold build takes several minutes.
-        return Dense(cli_chunks(load_chunks()), build=False)
+        return cli_dense(build=False)
     except FileNotFoundError:
         # CI builds or restores the index, so a missing one there is a failure.
         if os.environ.get(REQUIRE_INDEX_ENV):
@@ -160,3 +157,43 @@ def test_embed_threads_env(monkeypatch, value, expected):
 
     monkeypatch.setenv(THREADS_ENV, value)
     assert embed_threads() == expected
+
+
+def test_index_parts_are_reused_per_snapshot(monkeypatch, tmp_path):
+    """Split by snapshot, adding a snapshot embeds only the new part, and rows
+    come back in the order of the chunks."""
+    import fastembed
+    import numpy as np
+
+    from fma.corpus import Chunk
+    from fma.dense import Dense
+
+    embedded: list[str] = []
+
+    class FakeModel:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def passage_embed(self, texts, batch_size):
+            for t in texts:
+                embedded.append(t)
+                yield np.array([len(t), 1.0], dtype=np.float32)
+
+    monkeypatch.setattr(fastembed, "TextEmbedding", FakeModel)
+
+    def chunk(snapshot, i, text):
+        return Chunk(
+            f"{snapshot}#{i}", "d", snapshot, "guide", "t", "h", text, "u", "r"
+        )
+
+    old = [chunk("flutter-3.27", 0, "a"), chunk("latest", 0, "bbbb")]
+    Dense(old, cache_dir=tmp_path, by_snapshot=True)
+    assert len(embedded) == 2 and len(list(tmp_path.glob("*.npy"))) == 2
+
+    embedded.clear()
+    new = [chunk("flutter-3.27", 0, "a"), chunk("flutter-3.35", 0, "cc"), old[1]]
+    d = Dense(new, cache_dir=tmp_path, by_snapshot=True)
+    assert [t.splitlines()[-1] for t in embedded] == ["cc"]  # only the new part
+    expected = np.array([[len(f"t\nh\n{c.text}"), 1.0] for c in new])
+    expected /= np.linalg.norm(expected, axis=1, keepdims=True)
+    assert np.allclose(d.matrix, expected)

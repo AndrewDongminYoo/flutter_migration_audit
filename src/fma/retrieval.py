@@ -61,6 +61,26 @@ def cli_chunks(chunks: list[Chunk]) -> list[Chunk]:
     ]
 
 
+def cli_dense(chunks: list[Chunk] | None = None, build: bool = True):
+    """The CLI's embedding index: only the sections evidence can come from,
+    cached in one part per snapshot. The retrieval comparison
+    (scripts/compare_retrieval.py) embeds the whole corpus as one part."""
+    from .dense import Dense
+
+    return Dense(cli_chunks(chunks or load_chunks()), build=build, by_snapshot=True)
+
+
+def cli_index_files() -> list[str]:
+    """File names of the CLI index parts, without loading the model."""
+    from .dense import cache_path, index_parts
+
+    chunks = cli_chunks(load_chunks())
+    return [
+        cache_path([chunks[i] for i in rows]).name
+        for rows in index_parts(chunks, by_snapshot=True)
+    ]
+
+
 def get_retriever(kind: str = DEFAULT) -> Retriever:
     if kind not in RETRIEVERS:
         raise ValueError(f"unknown retriever: {kind}")
@@ -69,9 +89,5 @@ def get_retriever(kind: str = DEFAULT) -> Retriever:
         if kind == "bm25":
             _CACHE[kind] = Index(chunks)
         else:
-            from .dense import Dense
-
-            # Only the sections evidence can come from. The retrieval
-            # comparison (scripts/compare_retrieval.py) embeds the whole corpus.
-            _CACHE[kind] = Dense(cli_chunks(chunks))
+            _CACHE[kind] = cli_dense(chunks)
     return _CACHE[kind]
