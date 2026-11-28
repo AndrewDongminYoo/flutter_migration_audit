@@ -247,3 +247,63 @@ def test_android16_launch_theme_loses_its_opt_out(index):
     assert f.verdict == NEEDS_CHECK
     assert "실행 화면" in f.reason and "맞추세요" not in (f.check or "")
     assert any("cannot opt-out" in e.quote for e in f.evidence)
+
+
+def alias_manifest(target, *activities):
+    return "\n".join(
+        f'<activity android:name="{n}" android:theme="@style/{t}"/>'
+        for n, t in activities
+    ) + (
+        f'\n<activity-alias android:name=".L" android:targetActivity="{target}">'
+        '<intent-filter><category android:name="android.intent.category.LAUNCHER"/>'
+        "</intent-filter></activity-alias>"
+    )
+
+
+def test_alias_matches_the_full_activity_name():
+    inputs = read(
+        alias_manifest(
+            "com.target.MainActivity",
+            ("com.first.MainActivity", "Wrong"),
+            ("com.target.MainActivity", "Right"),
+        )
+    )
+    assert inputs.launch_theme[0] == "Right"
+
+
+def test_relative_alias_target_matches_a_qualified_activity():
+    inputs = read(
+        alias_manifest(
+            ".MainActivity",
+            ("com.a.Settings", "Wrong"),
+            ("com.a.MainActivity", "Right"),
+        )
+    )
+    assert inputs.launch_theme[0] == "Right"
+
+
+def test_ambiguous_alias_target_chooses_nothing():
+    inputs = read(
+        alias_manifest(
+            ".MainActivity", ("com.a.MainActivity", "A"), ("com.b.MainActivity", "B")
+        )
+    )
+    assert inputs.launch_theme is None
+
+
+def test_launch_theme_with_too_many_configurations_needs_check(index, monkeypatch):
+    from fma.rules import Auditor
+
+    monkeypatch.setattr(Auditor, "MAX_CONFIGS", 1)
+    inputs = app(
+        ACTIVITY.format(NIGHT_META), styles(LaunchTheme=True, NormalTheme=True)
+    )
+    for q in ("values-night", "values-en", "values-ko"):
+        read_styles(
+            styles(LaunchTheme=True, NormalTheme=q != "values-night"),
+            f"{q}/styles.xml",
+            q,
+            inputs,
+        )
+    f = finding(audit("3.24.5", "3.27.1", inputs, index), "launch_theme")
+    assert f is not None and f.verdict == NEEDS_CHECK and "조합" in f.reason

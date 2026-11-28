@@ -866,7 +866,7 @@ class Auditor:
         if normal_name == launch_name:
             return
         unchecked = set(unchecked_qualifiers({s.qualifier for s in inp.styles}))
-        variants, _ = self.variant_configs(unchecked)
+        variants, combos = self.variant_configs(unchecked)
         configs: list[tuple[str | None, str | dict]] = [(None, "values")]
         configs += [(config_name(c), c) for c in variants or []]
         found = next(
@@ -889,6 +889,10 @@ class Auditor:
             None,
         )
         if found is None:
+            if variants is None:
+                self.launch_unchecked(
+                    launch_name, normal_name, combos, [launch_clue, normal_clue]
+                )
             return
         label, normal, launch = found
         where = "기본 설정에서" if label is None else f"`{label}` 설정에서"
@@ -916,6 +920,25 @@ class Auditor:
 
     def launch_differs(self, normal: bool, launch: bool) -> bool:
         return normal != launch
+
+    def launch_unchecked(
+        self, launch_name: str, normal_name: str, combos: int, clues: list[Clue]
+    ) -> None:
+        prefix = (
+            f"targetSdk가 {josa(self.tgt.default_target_sdk, '이/가')} 된다면: "
+            if self.conditional
+            else ""
+        )
+        self.add(
+            "launch_theme",
+            "실행 화면 테마의 opt-out",
+            NEEDS_CHECK,
+            f"{prefix}기본 설정에서는 실행 화면의 `{launch_name}` 스타일과 앱 화면의 `{normal_name}` 스타일이 "
+            f"opt-out을 같게 처리합니다. 하지만 리소스 한정자 조합이 {combos}개라서 다른 기기 설정은 비교하지 않았습니다.",
+            clues,
+            [E["launch_switch"]],
+            check="다크 모드 등 다른 설정의 두 스타일에서 opt-out 항목이 같은지 직접 확인하세요.",
+        )
 
     def launch_message(
         self, where: str, normal_name: str, launch_name: str, launch_opted: bool

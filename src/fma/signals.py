@@ -489,8 +489,23 @@ def _style_attr(
     return None
 
 
-def _short(activity: str) -> str:
-    return activity.rsplit(".", 1)[-1]
+def _same_activity(name: str, target: str) -> bool:
+    """Whether two android:name values can name the same class. A relative
+    name (.Main, or Main without a package) matches the end of a qualified
+    one, since the manifest's package may not be in the snippet."""
+
+    def relative(n: str) -> str | None:
+        if n.startswith("."):
+            return n
+        return "." + n if "." not in n else None
+
+    if name == target:
+        return True
+    for a, b in ((name, target), (target, name)):
+        rel = relative(a)
+        if rel and (b.endswith(rel) or relative(b) == rel):
+            return True
+    return False
 
 
 def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
@@ -537,9 +552,9 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
             else:
                 loose = theme
     for target in alias_targets:
-        for a in activities:
-            if _short(a["name"]) == _short(target):
-                a["launcher"] = True
+        matches = [a for a in activities if _same_activity(a["name"], target)]
+        if len(matches) == 1:  # an ambiguous target chooses nothing
+            matches[0]["launcher"] = True
     chosen = (
         next((a for a in activities if a["normal"]), None)
         or next((a for a in activities if a["launcher"]), None)
