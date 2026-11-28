@@ -427,6 +427,7 @@ class AppInputs:
     target_sdk: TargetSdk | None = None
     normal_theme: tuple[str, Clue] | None = None
     launch_theme: tuple[str, Clue] | None = None
+    framework_theme: tuple[str, Clue] | None = None  # such as @android:style/...
     styles: list[Style] = field(default_factory=list)
     ui_modes: list[tuple[str, Clue]] = field(default_factory=list)
     safe_areas: list[Clue] = field(default_factory=list)
@@ -474,18 +475,20 @@ def _attrs(tag: re.Match) -> dict[str, str]:
     return {m.group(1): m.group(2) or m.group(3) for m in ATTR.finditer(tag.group(2))}
 
 
-def _style_attr(
+def _theme_attr(
     text: str, name: str, tag: re.Match, attr: str
-) -> tuple[str, Clue] | None:
-    """The app style an attribute of the tag names, with the line that names it."""
+) -> tuple[str, Clue, bool] | None:
+    """An attribute's theme reference, with the line that names it and
+    whether it is an app style (@style/...). The name is the style name for
+    an app style, else the raw value (such as @android:style/...)."""
     for m in ATTR.finditer(tag.group(2)):
         if m.group(1) != attr:
             continue
-        style = APP_STYLE.match((m.group(2) or m.group(3) or "").strip())
-        if not style:
-            return None  # a framework theme such as @android:style/...
+        raw = (m.group(2) or m.group(3) or "").strip()
         line = text.count("\n", 0, tag.start(2) + m.start()) + 1
-        return style.group(1), Clue(name, line, text.splitlines()[line - 1])
+        clue = Clue(name, line, text.splitlines()[line - 1])
+        style = APP_STYLE.match(raw)
+        return (style.group(1), clue, True) if style else (raw, clue, False)
     return None
 
 
@@ -511,9 +514,10 @@ def _same_activity(name: str, target: str) -> bool:
 def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
     """Read the FlutterActivity's themes. The NormalTheme meta-data names the
     theme Flutter switches to after the launch screen; the activity's
-    android:theme (or the application's) is the launch theme. The activity is
-    the one with the meta-data, else the launcher (directly or through an
-    activity-alias), else the only one."""
+    android:theme (or, without one, the application's) is the launch theme.
+    The activity is the one with the meta-data, else the launcher (directly
+    or through an activity-alias), else the only one. A manifest that names
+    no theme (such as src/profile) keeps what an earlier one found."""
     inputs.manifest_provided = True
     body = CDATA.sub(_blank, XML_COMMENT.sub(_blank, text))
     app_theme = None
@@ -527,10 +531,13 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
         if current is not None and tag.start() > end:
             current = None
         if kind == "application":
-            app_theme = _style_attr(text, name, tag, "android:theme")
+            app_theme = _theme_attr(text, name, tag, "android:theme")
         elif kind in ACTIVITY_END:
             close = ACTIVITY_END[kind].search(body, tag.end())
-            end = tag.end() if tag.group(3) or not close else close.end()
+            if tag.group(3):
+                end = tag.end()
+            else:  # a snippet may omit the closing tag
+                end = close.end() if close else len(body)
             attrs = _attrs(tag)
             launcher = "android.intent.category.LAUNCHER" in body[tag.end() : end]
             if kind == "activity-alias":
@@ -540,13 +547,14 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
                 continue
             current = {
                 "name": attrs.get("android:name", ""),
-                "launch": _style_attr(text, name, tag, "android:theme"),
+                "theme": _theme_attr(text, name, tag, "android:theme"),
                 "normal": None,
                 "launcher": launcher,
             }
             activities.append(current)
         elif _attrs(tag).get("android:name") == NORMAL_THEME_META:
-            theme = _style_attr(text, name, tag, "android:resource")
+            found = _theme_attr(text, name, tag, "android:resource")
+            theme = found[:2] if found and found[2] else None
             if current is not None:
                 current["normal"] = theme
             else:
@@ -561,11 +569,17 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
         or (activities[0] if len(activities) == 1 else None)
     )
     if chosen:
-        inputs.normal_theme = chosen["normal"]
-        inputs.launch_theme = chosen["launch"] or app_theme
+        normal, launch = chosen["normal"], chosen["theme"] or app_theme
     elif not activities:
-        inputs.normal_theme = loose
-        inputs.launch_theme = app_theme
+        normal, launch = loose, app_theme
+    else:
+        normal, launch = None, None
+    if normal:
+        inputs.normal_theme = normal
+    if launch:
+        style, clue, is_app = launch
+        inputs.launch_theme = (style, clue) if is_app else None
+        inputs.framework_theme = None if is_app else (style, clue)
 
 
 # --- res/values*/styles.xml -----------------------------------------------

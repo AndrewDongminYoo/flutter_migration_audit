@@ -339,3 +339,54 @@ def test_android16_skipped_configurations_name_the_android16_check(index, monkey
     f = finding(audit("3.32.5", "3.35.1", inputs, index), "launch_theme")
     assert f.verdict == NEEDS_CHECK and "실행 화면 스타일에만" in f.check
     assert any("cannot opt-out" in e.quote for e in f.evidence)
+
+
+def test_a_later_manifest_without_themes_keeps_the_themes():
+    """Codex review on #34: src/profile/AndroidManifest.xml after src/main."""
+    inputs = AppInputs()
+    read_manifest(
+        f'<activity android:name=".MainActivity" android:theme="@style/LaunchTheme">\n'
+        f'<meta-data android:name="{META}" android:resource="@style/NormalTheme"/>\n</activity>',
+        "main/AndroidManifest.xml",
+        inputs,
+    )
+    read_manifest(
+        '<manifest><uses-permission android:name="android.permission.INTERNET"/></manifest>',
+        "profile/AndroidManifest.xml",
+        inputs,
+    )
+    assert inputs.normal_theme[0] == "NormalTheme"
+    assert inputs.launch_theme[0] == "LaunchTheme"
+
+
+def test_explicit_framework_theme_is_not_replaced_by_the_application_theme():
+    """Codex review on #34."""
+    inputs = read(
+        '<application android:theme="@style/AppBase">\n'
+        '<activity android:name=".MainActivity" android:theme="@android:style/Theme.Light.NoTitleBar"/>\n'
+        "</application>"
+    )
+    assert inputs.launch_theme is None
+    assert inputs.framework_theme[0] == "@android:style/Theme.Light.NoTitleBar"
+
+
+def test_framework_theme_needs_check(index):
+    inputs = app(
+        '<application android:theme="@style/AppBase">\n'
+        '<activity android:name=".MainActivity" android:theme="@android:style/Theme.Light.NoTitleBar"/>\n'
+        "</application>",
+        styles(AppBase=True),
+    )
+    f = finding(audit("3.24.5", "3.27.1", inputs, index), "opt_out")
+    assert (
+        f.verdict == NEEDS_CHECK and "@android:style/Theme.Light.NoTitleBar" in f.reason
+    )
+
+
+def test_unclosed_activity_snippet_keeps_its_meta_data():
+    """Codex review on #34: a snippet may omit </activity>."""
+    inputs = read(
+        '<activity android:name=".MainActivity" android:theme="@style/LaunchTheme">\n'
+        f'<meta-data android:name="{META}" android:resource="@style/AppTheme"/>'
+    )
+    assert inputs.normal_theme[0] == "AppTheme"

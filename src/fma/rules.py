@@ -421,14 +421,29 @@ class Auditor:
             return None
         theme_name, clues = self.theme()
         if theme_name is None:
+            framework = inp.framework_theme
+            if framework:
+                reason = (
+                    f"FlutterActivity가 앱 스타일이 아닌 `{framework[0]}` 테마를 써서, "
+                    "styles.xml에서 opt-out 여부를 판단할 수 없습니다."
+                )
+            else:
+                reason = (
+                    "AndroidManifest.xml에서 FlutterActivity의 테마(NormalTheme meta-data나 "
+                    "android:theme)를 찾지 못해, 어느 스타일의 opt-out을 봐야 할지 알 수 없습니다."
+                )
             self.add(
                 "opt_out",
                 title,
                 NEEDS_CHECK,
-                "AndroidManifest.xml에서 FlutterActivity의 테마(NormalTheme meta-data나 "
-                "android:theme)를 찾지 못해, 어느 스타일의 opt-out을 봐야 할지 알 수 없습니다.",
+                reason,
+                [framework[1]] if framework else [],
                 specs=[E["launch_switch"]],
-                check="FlutterActivity가 쓰는 테마를 확인하고, 그 activity가 들어 있는 AndroidManifest.xml을 넣어 주세요.",
+                check=(
+                    "이 테마에 opt-out 항목이 있는지, 코드에서 테마를 바꾸는지 확인하세요."
+                    if framework
+                    else "FlutterActivity가 쓰는 테마를 확인하고, 그 activity가 들어 있는 AndroidManifest.xml을 넣어 주세요."
+                ),
             )
             return None
         if not inp.normal_theme and inp.launch_theme:
