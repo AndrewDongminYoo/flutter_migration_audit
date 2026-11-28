@@ -436,6 +436,8 @@ class AppInputs:
     ambiguous_themes: list[tuple[str, Clue]] = field(default_factory=list)
     # Manifest merger directives (tools:node, tools:replace) in a later manifest.
     merge_directives: list[Clue] = field(default_factory=list)
+    # Styles from build-type source sets (src/debug, ...); not judged.
+    variant_styles: list[Style] = field(default_factory=list)
     styles: list[Style] = field(default_factory=list)
     ui_modes: list[tuple[str, Clue]] = field(default_factory=list)
     safe_areas: list[Clue] = field(default_factory=list)
@@ -783,6 +785,16 @@ def read_dart(text: str, name: str, inputs: AppInputs) -> None:
 # --- Discovery ------------------------------------------------------------
 
 
+def source_set(path: Path) -> str | None:
+    """The Gradle source set a file is in (`main`, `debug`, ...), from the
+    last `src/<name>/` segments of its path; None if the path has none."""
+    parts = path.parts
+    for i in range(len(parts) - 3, -1, -1):
+        if parts[i] == "src":
+            return parts[i + 1]
+    return None
+
+
 def read_paths(paths: list[Path], root: Path | None = None) -> AppInputs:
     """Read known file types. `root` only shortens names in the report."""
     inputs = AppInputs()
@@ -810,9 +822,13 @@ def read_paths(paths: list[Path], root: Path | None = None) -> AppInputs:
             read_manifest(text, name, inputs)
         elif path.name == "styles.xml":
             parent = path.parent.name
-            read_styles(
-                text, name, parent if parent.startswith("values") else "values", inputs
-            )
+            qualifier = parent if parent.startswith("values") else "values"
+            if source_set(path) in (None, "main"):
+                read_styles(text, name, qualifier, inputs)
+            else:  # a build-type source set: recorded, not judged
+                variant = AppInputs()
+                read_styles(text, name, qualifier, variant)
+                inputs.variant_styles += variant.styles
         elif path.suffix == ".dart":
             read_dart(text, name, inputs)
         else:
