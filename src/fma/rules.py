@@ -397,6 +397,8 @@ class Auditor:
         None when a manifest was given but names neither. Without a manifest,
         the template's NormalTheme."""
         inp = self.inputs
+        if inp.ambiguous_themes:
+            return None, []  # several FlutterActivities, none the launcher
         if inp.normal_framework and not inp.normal_theme:
             return None, []  # the meta-data names a theme styles.xml cannot hold
         found = inp.normal_theme or inp.launch_theme
@@ -424,7 +426,14 @@ class Auditor:
         theme_name, clues = self.theme()
         if theme_name is None:
             framework = inp.normal_framework or inp.framework_theme
-            if framework:
+            if inp.ambiguous_themes:
+                names = ", ".join(f"`{t}`" for t, _ in inp.ambiguous_themes)
+                reason = (
+                    f"NormalTheme meta-data가 있는 activity가 여럿이고({names}) 그중 실행 activity를 "
+                    "정할 수 없어, 어느 스타일의 opt-out을 봐야 할지 알 수 없습니다."
+                )
+                framework = None
+            elif framework:
                 reason = (
                     f"FlutterActivity가 앱 스타일이 아닌 `{framework[0]}` 테마를 써서, "
                     "styles.xml에서 opt-out 여부를 판단할 수 없습니다."
@@ -439,15 +448,30 @@ class Auditor:
                 title,
                 NEEDS_CHECK,
                 reason,
-                [framework[1]] if framework else [],
+                (
+                    [c for _, c in inp.ambiguous_themes]
+                    if inp.ambiguous_themes
+                    else [framework[1]] if framework else []
+                ),
                 specs=[E["launch_switch"]],
                 check=(
-                    "이 테마에 opt-out 항목이 있는지, 코드에서 테마를 바꾸는지 확인하세요."
-                    if framework
-                    else "FlutterActivity가 쓰는 테마를 확인하고, 그 activity가 들어 있는 AndroidManifest.xml을 넣어 주세요."
+                    "실제로 실행되는 FlutterActivity가 어느 것인지 확인하고, 그 activity의 NormalTheme 스타일을 확인하세요."
+                    if inp.ambiguous_themes
+                    else (
+                        "이 테마에 opt-out 항목이 있는지, 코드에서 테마를 바꾸는지 확인하세요."
+                        if framework
+                        else "FlutterActivity가 쓰는 테마를 확인하고, 그 activity가 들어 있는 AndroidManifest.xml을 넣어 주세요."
+                    )
                 ),
             )
             return None
+        for clue in inp.merge_directives:
+            note = (
+                f"`{clue.file}`의 {clue.line}행에 manifest 병합 지시(tools:node 등)가 있습니다. "
+                "병합 결과는 계산하지 않았으므로, 이 manifest를 쓰는 빌드에서는 테마가 다를 수 있습니다."
+            )
+            if note not in self.notes:
+                self.notes.append(note)
         for other, clue in inp.other_themes:
             note = (
                 f"`{clue.file}`의 {clue.line}행은 `{other}` 테마를 지정하지만, "

@@ -464,3 +464,80 @@ def test_a_later_manifest_does_not_fill_the_base_manifest_gaps():
     assert inputs.normal_theme is None
     assert inputs.launch_theme[0] == "MainTheme"
     assert [t[0] for t in inputs.other_themes] == ["DebugTheme"]
+
+
+TWO_FLUTTER_ACTIVITIES = (
+    '<activity android:name=".Other" android:theme="@style/OtherLaunch">\n'
+    f'<meta-data android:name="{META}" android:resource="@style/OtherTheme"/>\n</activity>\n'
+    '<activity android:name=".MainActivity" android:theme="@style/LaunchTheme">\n'
+    f'<meta-data android:name="{META}" android:resource="@style/NormalTheme"/>\n'
+    "{}</activity>"
+)
+LAUNCHER = '<intent-filter><category android:name="android.intent.category.LAUNCHER"/></intent-filter>\n'
+
+
+def test_launcher_wins_among_activities_with_meta_data():
+    inputs = read(TWO_FLUTTER_ACTIVITIES.format(LAUNCHER))
+    assert inputs.normal_theme[0] == "NormalTheme"
+    assert inputs.launch_theme[0] == "LaunchTheme"
+
+
+def test_several_activities_with_meta_data_and_no_launcher_choose_nothing(index):
+    inputs = app(
+        TWO_FLUTTER_ACTIVITIES.format(""), styles(OtherTheme=True, NormalTheme=False)
+    )
+    assert inputs.normal_theme is None
+    assert sorted(t[0] for t in inputs.ambiguous_themes) == [
+        "NormalTheme",
+        "OtherTheme",
+    ]
+    f = finding(audit("3.24.5", "3.27.1", inputs, index), "opt_out")
+    assert (
+        f.verdict == NEEDS_CHECK
+        and "`OtherTheme`" in f.reason
+        and "`NormalTheme`" in f.reason
+    )
+
+
+def test_application_level_meta_data_is_not_a_flutter_theme():
+    inputs = read(
+        '<application android:theme="@style/AppBase">\n'
+        f'<meta-data android:name="{META}" android:resource="@style/AppTheme"/>\n'
+        "</application>"
+    )
+    assert inputs.normal_theme is None
+    assert inputs.launch_theme[0] == "AppBase"
+
+
+def test_removed_meta_data_is_not_a_declaration_and_merge_directives_are_noted(index):
+    inputs = app(
+        ACTIVITY.format(NIGHT_META), styles(LaunchTheme=True, NormalTheme=True)
+    )
+    read_manifest(
+        '<activity android:name=".MainActivity">\n'
+        f'<meta-data android:name="{META}" tools:node="remove"/>\n</activity>',
+        "debug/AndroidManifest.xml",
+        inputs,
+    )
+    assert inputs.normal_theme[0] == "NormalTheme"
+    report = audit("3.24.5", "3.27.1", inputs, index)
+    assert any(
+        "tools:node" in n and "debug/AndroidManifest.xml" in n for n in report.notes
+    )
+
+
+def test_explicit_manifests_outside_src_main_keep_the_given_order(tmp_path):
+    from fma.signals import read_paths
+
+    for d, theme in (("z-base", "BaseTheme"), ("a-debug", "DebugTheme")):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / "AndroidManifest.xml").write_text(
+            f'<activity android:name=".MainActivity">\n<meta-data android:name="{META}" android:resource="@style/{theme}"/>\n</activity>'
+        )
+    inputs = read_paths(
+        [
+            tmp_path / "z-base/AndroidManifest.xml",
+            tmp_path / "a-debug/AndroidManifest.xml",
+        ]
+    )
+    assert inputs.normal_theme[0] == "BaseTheme"

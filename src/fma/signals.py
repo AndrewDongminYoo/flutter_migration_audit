@@ -432,6 +432,10 @@ class AppInputs:
     theme_manifest: str | None = None  # the manifest that decided the themes
     # Themes a later manifest (such as src/debug) names but the audit does not judge.
     other_themes: list[tuple[str, Clue]] = field(default_factory=list)
+    # Several activities name a NormalTheme and none is the launcher.
+    ambiguous_themes: list[tuple[str, Clue]] = field(default_factory=list)
+    # Manifest merger directives (tools:node, tools:replace) in a later manifest.
+    merge_directives: list[Clue] = field(default_factory=list)
     styles: list[Style] = field(default_factory=list)
     ui_modes: list[tuple[str, Clue]] = field(default_factory=list)
     safe_areas: list[Clue] = field(default_factory=list)
@@ -468,6 +472,8 @@ MANIFEST_TAG = re.compile(
     r"<(application|activity-alias|activity|meta-data)\b([^>]*?)(/?)>", re.DOTALL
 )
 ACTIVITY_START = re.compile(r"<activity(?:-alias)?\b")
+APPLICATION_END = re.compile(r"</application\s*>")
+MERGE_DIRECTIVE = re.compile(r"\btools:(?:node|replace|remove)\s*=")
 ACTIVITY_END = {
     "activity": re.compile(r"</activity\s*>"),
     "activity-alias": re.compile(r"</activity-alias\s*>"),
@@ -520,23 +526,38 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
     """Read the FlutterActivity's themes. The NormalTheme meta-data names the
     theme Flutter switches to after the launch screen; the activity's
     android:theme (or, without one, the application's) is the launch theme.
-    The activity is the one with the meta-data, else the launcher (directly
-    or through an activity-alias), else the only one. A manifest that names
-    no theme (such as src/profile) keeps what an earlier one found."""
+
+    The activity is the launcher among those with the meta-data, else the
+    only one with it, else the launcher (directly or through an
+    activity-alias), else the only activity. Flutter reads the meta-data of
+    the activity, so application-level meta-data does not count; a bare
+    meta-data snippet does. The first manifest that names a theme (read_paths
+    reads src/main first) decides them all; a later one is only recorded,
+    with any manifest merger directives it carries."""
     inputs.manifest_provided = True
     body = CDATA.sub(_blank, XML_COMMENT.sub(_blank, text))
     app_theme = None
+    app_end = -1
     loose = None  # NormalTheme meta-data outside any activity (a snippet)
     activities: list[dict] = []
     alias_targets: list[str] = []  # targetActivity of launcher aliases
+    directives: list[Clue] = []
     current = None
     end = -1
     for tag in MANIFEST_TAG.finditer(body):
         kind = tag.group(1)
+        attrs = _attrs(tag)
+        if MERGE_DIRECTIVE.search(tag.group(2)):
+            line = text.count("\n", 0, tag.start()) + 1
+            directives.append(Clue(name, line, text.splitlines()[line - 1]))
         if current is not None and tag.start() > end:
             current = None
         if kind == "application":
             app_theme = _theme_attr(text, name, tag, "android:theme")
+            close = APPLICATION_END.search(body, tag.end())
+            app_end = (
+                tag.end() if tag.group(3) else (close.end() if close else len(body))
+            )
         elif kind in ACTIVITY_END:
             if tag.group(3):
                 end = tag.end()
@@ -545,7 +566,6 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
                 limit = sibling.start() if sibling else len(body)
                 close = ACTIVITY_END[kind].search(body, tag.end(), limit)
                 end = close.end() if close else limit
-            attrs = _attrs(tag)
             launcher = "android.intent.category.LAUNCHER" in body[tag.end() : end]
             if kind == "activity-alias":
                 current = None  # its meta-data does not theme the activity
@@ -559,39 +579,52 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
                 "launcher": launcher,
             }
             activities.append(current)
-        elif _attrs(tag).get("android:name") == NORMAL_THEME_META:
+        elif attrs.get("android:name") == NORMAL_THEME_META:
+            if attrs.get("tools:node") in ("remove", "removeAll"):
+                continue  # removes a declaration; it declares nothing
             theme = _theme_attr(text, name, tag, "android:resource")
             if current is not None:
                 current["normal"] = theme
-            else:
-                loose = theme
+            elif tag.start() > app_end:
+                loose = theme  # outside the application: a bare snippet
     for target in alias_targets:
         matches = [a for a in activities if _same_activity(a["name"], target)]
         if len(matches) == 1:  # an ambiguous target chooses nothing
             matches[0]["launcher"] = True
-    chosen = (
-        next((a for a in activities if a["normal"]), None)
-        or next((a for a in activities if a["launcher"]), None)
-        or (activities[0] if len(activities) == 1 else None)
-    )
+    flutter = [a for a in activities if a["normal"]]
+    ambiguous: list[tuple[str, Clue]] = []
+    if len(flutter) > 1:
+        launchers = [a for a in flutter if a["launcher"]]
+        chosen = launchers[0] if len(launchers) == 1 else None
+        if chosen is None:
+            ambiguous = [a["normal"][:2] for a in flutter]
+    else:
+        launchers = [a for a in activities if a["launcher"]]
+        chosen = (
+            (flutter[0] if flutter else None)
+            or (launchers[0] if len(launchers) == 1 else None)
+            or (activities[0] if len(activities) == 1 else None)
+        )
     if chosen:
         normal, launch = chosen["normal"], chosen["theme"] or app_theme
     elif not activities:
         normal, launch = loose, app_theme
     else:
         normal, launch = None, None
-    if not (normal or launch):
-        return  # names no theme (such as src/profile with permissions only)
     if inputs.theme_manifest is not None:
-        # The first manifest that names a theme (src/main, which read_paths
-        # reads first) decides them all; a later one is only recorded.
+        # A later manifest (such as src/debug) does not decide the themes.
+        inputs.merge_directives += directives
         base_normal = inputs.normal_theme or inputs.normal_framework
         base_launch = inputs.launch_theme or inputs.framework_theme
         for new, base in ((normal, base_normal), (launch, base_launch)):
             if new and (base is None or new[0] != base[0]):
                 inputs.other_themes.append(new[:2])
+        inputs.other_themes += [t for t in ambiguous if t not in inputs.other_themes]
         return
+    if not (normal or launch or ambiguous):
+        return  # names no theme (such as src/profile with permissions only)
     inputs.theme_manifest = name
+    inputs.ambiguous_themes = ambiguous
     if normal:
         style, clue, is_app = normal
         inputs.normal_theme = (style, clue) if is_app else None
@@ -754,11 +787,15 @@ def read_paths(paths: list[Path], root: Path | None = None) -> AppInputs:
     """Read known file types. `root` only shortens names in the report."""
     inputs = AppInputs()
 
+    given = {path: i for i, path in enumerate(paths)}
+
     def order(path: Path):
-        # src/main's manifest first: build-type manifests (src/debug, src/profile)
-        # only add to the base source set; they do not decide the audited theme.
-        variant = path.name == "AndroidManifest.xml" and "main" not in path.parts
-        return (variant, path)
+        # src/main's manifest first: build-type manifests (src/debug,
+        # src/profile) only add to the base source set; they do not decide
+        # the audited theme. Other manifests keep the order they were given.
+        if path.name == "AndroidManifest.xml" and "main" not in path.parts:
+            return (1, given[path], path)
+        return (0, 0, path)  # Path order compares parts: values before values-night
 
     for path in sorted(paths, key=order):
         name = str(path.relative_to(root)) if root else str(path)
@@ -796,4 +833,4 @@ def discover(root: Path) -> AppInputs:
             )
         )
     ]
-    return read_paths(wanted, root)
+    return read_paths(sorted(wanted), root)
