@@ -413,11 +413,16 @@ class Auditor:
         inp = self.inputs
         title = OPT_OUT_TITLE
         if not inp.styles_provided:
+            where = (
+                "기본 소스 세트(src/main)의 styles.xml을 받지 못해(빌드 유형별 소스 세트의 styles.xml만 받았습니다)"
+                if inp.variant_styles
+                else "styles.xml을 받지 못해"
+            )
             self.add(
                 "opt_out",
                 title,
                 NEEDS_CHECK,
-                "styles.xml을 받지 못해 opt-out 여부를 알 수 없습니다.",
+                f"{where} opt-out 여부를 알 수 없습니다.",
                 specs=[E["edge_default"]],
                 check="res/values/styles.xml의 NormalTheme에 "
                 "android:windowOptOutEdgeToEdgeEnforcement 항목이 있는지 확인하세요.",
@@ -465,6 +470,21 @@ class Auditor:
                 ),
             )
             return None
+        judged = {
+            (st.qualifier, st.name): (st.opt_out_raw, st.parent) for st in inp.styles
+        }
+        names = {st.name for st in inp.styles}
+        for st in inp.variant_styles:
+            key = (st.qualifier, st.name)
+            if st.name not in names or judged.get(key) == (st.opt_out_raw, st.parent):
+                continue  # a style main lacks, or the same opt-out and parent
+            note = (
+                f"`{st.clue.file}`의 {st.clue.line}행은 빌드 유형별 소스 세트에서 `{st.name}` 스타일을 "
+                "다르게 정의합니다. opt-out은 기본 소스 세트(main)의 스타일로 판단했으므로, "
+                "이 소스 세트를 쓰는 빌드에서는 결과가 다를 수 있습니다."
+            )
+            if note not in self.notes:
+                self.notes.append(note)
         for clue in inp.merge_directives:
             note = (
                 f"`{clue.file}`의 {clue.line}행에 manifest 병합 지시(tools:node 등)가 있습니다. "
@@ -705,7 +725,7 @@ class Auditor:
             elif result.missing_parent:
                 detail = f"부모인 `{result.missing_parent}` 스타일이 입력에 없어 확인할 수 없습니다"
             else:
-                detail = "적용되는 스타일 체인에 opt-out 항목이 없습니다"
+                detail = "opt-out 항목이 없습니다"
             used = " → ".join(f"{s.qualifier}/{s.name}" for s in result.styles)
             clues = [s.clue for s in result.styles] + (
                 [result.clue] if result.clue else []
@@ -715,7 +735,7 @@ class Auditor:
                     "opt_out_night",
                     "다크 모드 스타일의 opt-out",
                     NEEDS_CHECK,
-                    f"`{name}` 설정에서 Android가 고르는 스타일 체인({used})에서 {detail}. "
+                    f"`{name}` 설정에서 Android가 고르는 {josa(f'스타일 체인({used})', '을/를')} 따라가면 {detail}. "
                     f"{self.tgt_label} 시점 문서는 다크 모드 스타일을 언급하지 않았고, 이후 문서에서 같은 항목을 넣으라는 안내가 추가됐습니다.",
                     clues,
                     [E["opt_out_night"]],
@@ -729,7 +749,8 @@ class Auditor:
                     "opt_out_variant",
                     f"`{name}` 설정의 opt-out",
                     NEEDS_CHECK,
-                    f"기본 설정에서는 opt-out이 적용되지만, `{name}` 설정에서 Android가 고르는 스타일 체인({used})에서 {detail}. "
+                    f"기본 설정에서는 opt-out이 적용되지만, `{name}` 설정에서 Android가 고르는 "
+                    f"{josa(f'스타일 체인({used})', '을/를')} 따라가면 {detail}. "
                     f"{self.tgt_label} 문서는 이런 리소스 변형을 다루지 않으므로 기기에서 직접 확인해야 합니다.",
                     clues,
                     tests=[

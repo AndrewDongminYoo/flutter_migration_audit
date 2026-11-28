@@ -436,6 +436,8 @@ class AppInputs:
     ambiguous_themes: list[tuple[str, Clue]] = field(default_factory=list)
     # Manifest merger directives (tools:node, tools:replace) in a later manifest.
     merge_directives: list[Clue] = field(default_factory=list)
+    # Styles from build-type source sets (src/debug, ...); not judged.
+    variant_styles: list[Style] = field(default_factory=list)
     styles: list[Style] = field(default_factory=list)
     ui_modes: list[tuple[str, Clue]] = field(default_factory=list)
     safe_areas: list[Clue] = field(default_factory=list)
@@ -783,21 +785,49 @@ def read_dart(text: str, name: str, inputs: AppInputs) -> None:
 # --- Discovery ------------------------------------------------------------
 
 
+def source_set(path: Path) -> str | None:
+    """The Gradle source set a file is in (`main`, `debug`, ...): the name in
+    the last `src/<name>/res/...` or `src/<name>/AndroidManifest.xml` of its
+    path. None if the path has no such shape."""
+    parts = path.parts
+    for i in range(len(parts) - 3, -1, -1):
+        if parts[i] != "src":
+            continue
+        rest = parts[i + 2 :]
+        if rest == ("AndroidManifest.xml",) or (rest[0] == "res" and len(rest) > 1):
+            return parts[i + 1]
+    return None
+
+
+def build_type_styles(path: Path, relative: Path) -> bool:
+    """Whether a styles.xml is in a source set other than main. The path
+    must look like one and have a src/main next to it on disk, as every
+    Android module does; an unrelated `src/<name>/res` directory is judged."""
+    name = source_set(relative)
+    if name in (None, "main"):
+        return False
+    parts = path.parts
+    i = max(
+        k for k in range(len(parts) - 2) if parts[k] == "src" and parts[k + 1] == name
+    )
+    return Path(*parts[: i + 1], "main").is_dir()
+
+
 def read_paths(paths: list[Path], root: Path | None = None) -> AppInputs:
     """Read known file types. `root` only shortens names in the report."""
     inputs = AppInputs()
 
     given = {path: i for i, path in enumerate(paths)}
 
+    def rel(path: Path) -> Path:
+        # Look for source sets below the input root only.
+        return path.relative_to(root) if root else path
+
     def order(path: Path):
         # src/main's manifest first: build-type manifests (src/debug,
         # src/profile) only add to the base source set; they do not decide
         # the audited theme. Other manifests keep the order they were given.
-        parts = path.parts
-        in_main = any(
-            parts[i : i + 2] == ("src", "main") for i in range(len(parts) - 1)
-        )
-        if path.name == "AndroidManifest.xml" and not in_main:
+        if path.name == "AndroidManifest.xml" and source_set(rel(path)) != "main":
             return (1, given[path], path)
         return (0, 0, path)  # Path order compares parts: values before values-night
 
@@ -810,9 +840,13 @@ def read_paths(paths: list[Path], root: Path | None = None) -> AppInputs:
             read_manifest(text, name, inputs)
         elif path.name == "styles.xml":
             parent = path.parent.name
-            read_styles(
-                text, name, parent if parent.startswith("values") else "values", inputs
-            )
+            qualifier = parent if parent.startswith("values") else "values"
+            if not build_type_styles(path, rel(path)):
+                read_styles(text, name, qualifier, inputs)
+            else:  # a build-type source set: recorded, not judged
+                variant = AppInputs()
+                read_styles(text, name, qualifier, variant)
+                inputs.variant_styles += variant.styles
         elif path.suffix == ".dart":
             read_dart(text, name, inputs)
         else:
