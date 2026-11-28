@@ -42,8 +42,8 @@ CI runs only the corpus build, the index build, and `pytest` with `FMA_REQUIRE_E
 The pipeline for `fma audit` (`src/fma/cli.py`):
 
 1. `signals.py` reads clues from the user's snippets (`build.gradle(.kts)`, `AndroidManifest.xml`, `res/values*/styles.xml`, Dart). Each clue keeps its file and line. The reader also records which inputs are missing, and it resolves Android resource qualifiers for the opt-out style (see [docs/resource-qualifiers.md](docs/resource-qualifiers.md)).
-2. `versions.py` maps a Flutter version to a docs snapshot and to the default `targetSdk`. Only 3.24.x → 3.27.x is supported.
-3. `rules.py` gives each rule a verdict: `영향 있음`, `영향 없음`, or `추가 확인 필요`. Each rule names its evidence with a `Spec` from the `E` table or from `mode_spec`.
+2. `versions.py` maps a Flutter version to a docs snapshot and to the default `targetSdk`. Two ranges are supported: 3.24.x → 3.27.x (`targetSdk` 34 → 35) and 3.32.x → 3.35.x (35 → 36).
+3. `rules.py` gives each rule a verdict: `영향 있음`, `영향 없음`, or `추가 확인 필요`. Each rule names its evidence with a `Spec` from the `E` table or from `mode_spec`. A target whose default `targetSdk` is 36 uses `Android16Auditor` and the `A16` table instead: there the apps that change are the ones that rely on the opt-out. `all_specs(release)` lists every spec a target can request.
 4. `retrieval.py` selects the retriever that proposes candidates: `dense.py` (embedding, default) or the BM25 index in `corpus.py`.
 5. `evidence.py` accepts a candidate only when it comes from the required snapshot and contains `must_contain` (and `heading`, if set). If no candidate passes, the rule drops to `추가 확인 필요`.
 6. `report.py` renders text or JSON.
