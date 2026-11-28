@@ -34,3 +34,14 @@ def test_filter_keeps_labels_up_to_the_target_and_unlabeled_docs(index):
         assert passes_label_filter(by_doc[f"{snap}:{EDGE}"])
     later = [c for d, c in by_doc.items() if (version_label(d) or (0, 0)) > (3, 27)]
     assert later and not any(passes_label_filter(c) for c in later)
+
+
+def test_a_v_prefixed_landed_in_is_a_label():
+    """Local review: some footers write "Landed in version: v3.27.0-0.1.pre"."""
+    from fma.evalset import _docs
+
+    prefixed = [
+        i for i, d in _docs().items() if (d.get("landed_in") or "").startswith("v")
+    ]
+    assert prefixed
+    assert all(version_label(i) is not None for i in prefixed)

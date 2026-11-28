@@ -79,7 +79,7 @@ def _doc_keys() -> dict[str, str]:
 # footer's "Landed in version" (often a pre-release). Guides, release notes,
 # and API docs carry none.
 LABEL_FIELDS = ("stable_release_footer", "stable_release_index", "landed_in")
-MAJOR_MINOR = re.compile(r"(\d+)\.(\d+)")
+MAJOR_MINOR = re.compile(r"v?(\d+)\.(\d+)")
 
 
 def version_label(doc_id: str) -> tuple[int, int] | None:
