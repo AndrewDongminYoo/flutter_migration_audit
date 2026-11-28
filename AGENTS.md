@@ -35,7 +35,7 @@ CI runs only the corpus build, the index build, and `pytest` with `FMA_REQUIRE_E
 - Without the corpus, tests that use the `index` fixture (`tests/conftest.py`) skip.
 - Without the embedding index, the embedding tests skip. With `FMA_REQUIRE_EMBEDDING_INDEX=1` they fail instead (`tests/test_retrievers.py`).
 - Tests never build the index. A green run with skips does not cover the rules. Read the `-rs` output before you report a pass.
-- `fma index` embeds about 57% of the corpus and takes about 5 minutes on a laptop CPU.
+- `fma index` embeds about a third of the corpus and takes about 5 minutes on a laptop CPU.
 
 ## Architecture
 

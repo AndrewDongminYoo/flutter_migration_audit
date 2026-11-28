@@ -18,6 +18,24 @@
     "doc_count": 175
   },
   {
+    "snapshot_id": "flutter-3.32",
+    "represents": "3.32.0",
+    "released": "2025-05-20T16:31:31.067027Z",
+    "window_closes": "3.35.0 released 2025-08-14T16:51:28.045253Z",
+    "commit": "04e40bb7b40c4f5b7fd1b10335743588126af233",
+    "commit_date": "2025-08-14T09:15:00-07:00",
+    "doc_count": 194
+  },
+  {
+    "snapshot_id": "flutter-3.35",
+    "represents": "3.35.0",
+    "released": "2025-08-14T16:51:28.045253Z",
+    "window_closes": "3.38.0 released 2025-11-12T18:48:03.545740Z",
+    "commit": "ae1d177e3276748e7e81dff93e76f91ba01ab16e",
+    "commit_date": "2025-11-12T11:29:36-06:00",
+    "doc_count": 203
+  },
+  {
     "snapshot_id": "latest",
     "represents": "current docs (pinned)",
     "released": null,

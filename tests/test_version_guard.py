@@ -26,13 +26,14 @@ def chunk(index, snapshot, heading):
 @pytest.mark.parametrize("key", ["opt_out_works", "target_default", "already_migrated"])
 def test_unfiltered_search_ranks_a_wrong_version_first(index, key):
     spec = E[key]
-    top = index.search(spec.query, kinds=spec.kinds, top_k=3)
+    revisions = {c.snapshot_id for c in index.chunks if c.doc_id.endswith(EDGE_DOC)}
+    top = index.search(spec.query, kinds=spec.kinds, top_k=len(revisions))
     snapshots = [c.snapshot_id for _, c in top]
-    # The trap this project is about: all three revisions score within a few
+    # The trap this project is about: every revision scores within a few
     # percent, and the top hit is not the 3.27 revision.
     assert snapshots[0] != TARGET.snapshot_id
-    assert set(snapshots) == {"flutter-3.24", "flutter-3.27", LATEST}
-    assert top[2][0] / top[0][0] > 0.9
+    assert set(snapshots) == revisions and {"flutter-3.27", LATEST} <= revisions
+    assert top[-1][0] / top[0][0] > 0.9
 
 
 def test_wrong_revision_of_opt_out_text_is_rejected(index):

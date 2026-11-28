@@ -37,6 +37,8 @@ RELEASES_JSON = (
 RELEASE_SNAPSHOTS = {
     "flutter-3.24": ("3.24.0", "3.27.0"),
     "flutter-3.27": ("3.27.0", "3.29.0"),
+    "flutter-3.32": ("3.32.0", "3.35.0"),
+    "flutter-3.35": ("3.35.0", "3.38.0"),
 }
 # Pinned so the corpus is reproducible. Update deliberately.
 LATEST_SNAPSHOT = ("latest", "a0b75bedb9557c5b71c81d8482a3073c05a0b7f3")

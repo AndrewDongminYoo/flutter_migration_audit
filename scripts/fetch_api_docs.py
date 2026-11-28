@@ -40,6 +40,8 @@ MANIFEST = ROOT / "data" / "manifest"
 TAGS = {
     "flutter-3.24": "3.24.0",
     "flutter-3.27": "3.27.0",
+    "flutter-3.32": "3.32.0",
+    "flutter-3.35": "3.35.0",
     "latest": "3.50.1",
 }
 

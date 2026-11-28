@@ -8,6 +8,8 @@ flutter/website 저장소에는 릴리스 태그가 없습니다. 그래서 각 
 | -------------- | --------- | ------------------------- | ------------------ |
 | `flutter-3.24` | 3.24.0    | `4e5c7d2f72` (2024-12-11) | 3.27.0 릴리스 직전 |
 | `flutter-3.27` | 3.27.0    | `d69db60f99` (2025-02-11) | 3.29.0 릴리스 직전 |
+| `flutter-3.32` | 3.32.0    | `04e40bb7b4` (2025-08-14) | 3.35.0 릴리스 직전 |
+| `flutter-3.35` | 3.35.0    | `ae1d177e32` (2025-11-12) | 3.38.0 릴리스 직전 |
 | `latest`       | 현재 문서 | `a0b75bedb9` (2026-11-25) | 고정 커밋          |
 
 docs.flutter.dev에서 수집하는 대상은 다음과 같습니다. 전체 목록과 메타데이터는 `data/manifest/docs.jsonl`에 있고, 원문은 `scripts/fetch_snapshots.py`로 `data/raw/snapshots/`에 다시 만들 수 있습니다.
@@ -28,15 +30,17 @@ api.flutter.dev는 최신 릴리스만 제공합니다. 그래서 이전 버전�
 | -------------- | ------------- | ------- |
 | `flutter-3.24` | 3.24.0        | 15      |
 | `flutter-3.27` | 3.27.0        | 15      |
+| `flutter-3.32` | 3.32.0        | 15      |
+| `flutter-3.35` | 3.35.0        | 16      |
 | `latest`       | 3.50.1 (고정) | 16      |
 
 대상 소스는 `system_chrome.dart`(`SystemUiMode`, `SystemChrome`, `SystemUiOverlayStyle`), `safe_area.dart`, `media_query.dart`, `annotated_region.dart`, `app_bar.dart`입니다. API 스냅샷은 릴리스 태그 자체를 쓰고, 웹사이트 스냅샷은 다음 릴리스 직전 커밋을 씁니다. API 문서는 릴리스와 함께 배포되지만 웹사이트 문서는 릴리스 이후에도 계속 고쳐지기 때문입니다.
 
-`SystemUiMode` 문서도 판본마다 다릅니다. 3.24에는 API 35 언급이 없습니다. 3.27에는 "Android 15(API 35)를 대상으로 하면 edge-to-edge가 기본"이라는 설명이 추가됐고, 3.50.1에는 "API 36 이상이면 시스템이 이 값을 무시한다"는 설명이 더해졌습니다.
+`SystemUiMode` 문서도 판본마다 다릅니다. 3.24에는 API 35 언급이 없습니다. 3.27에는 "Android 15(API 35)를 대상으로 하면 edge-to-edge가 기본"이라는 설명이 추가됐고, 3.35.0부터는 "API 36 이상이면 시스템이 이 값을 무시한다"는 설명이 더해졌습니다. 3.35는 `flutter.targetSdkVersion` 기본값이 36으로 바뀐 릴리스입니다.
 
-`{@macro}`로 다른 곳의 `{@template}`을 불러오는 부분은 dartdoc처럼 펼쳐 넣습니다. 템플릿은 같은 태그의 `packages/flutter/lib` 아래 모든 Dart 파일에서 모읍니다. 예를 들어 `SliverAppBar.primary`에는 `AppBar.primary`의 설명("상태바 높이만큼 위쪽을 띄운다")이 들어갑니다. `dart:ui`처럼 그 밖에 정의된 템플릿은 펼치지 못하고, 매니페스트의 `unresolved_macros`에 남깁니다. 지금은 세 스냅샷 모두 `dart.ui.ViewConfiguration.displayFeatures` 하나뿐입니다.
+`{@macro}`로 다른 곳의 `{@template}`을 불러오는 부분은 dartdoc처럼 펼쳐 넣습니다. 템플릿은 같은 태그의 `packages/flutter/lib` 아래 모든 Dart 파일에서 모읍니다. 예를 들어 `SliverAppBar.primary`에는 `AppBar.primary`의 설명("상태바 높이만큼 위쪽을 띄운다")이 들어갑니다. `dart:ui`처럼 그 밖에 정의된 템플릿은 펼치지 못하고, 매니페스트의 `unresolved_macros`에 남깁니다. 지금은 다섯 스냅샷 모두 `dart.ui.ViewConfiguration.displayFeatures` 하나뿐입니다.
 
-## 같은 문서, 세 가지 판본
+## 같은 문서, 다섯 가지 판본
 
 `default-systemuimode-edge-to-edge.md`는 스냅샷마다 내용이 다릅니다.
 
@@ -44,9 +48,11 @@ api.flutter.dev는 최신 릴리스만 제공합니다. 그래서 이전 버전�
 | -------------- | -------------------------- | --------------------- | --------------- | ------------------- | ---------------- |
 | `flutter-3.24` | Not yet released to stable | 없음                  | 없음            | 없음                | 없음             |
 | `flutter-3.27` | Released in Flutter 3.27   | 3.26.0-0.0.pre / 3.27 | 없음            | 없음                | 없음             |
+| `flutter-3.32` | Released in Flutter 3.27   | 3.26.0-0.0.pre / 3.27 | 4회             | 있음                | 없음             |
+| `flutter-3.35` | Released in Flutter 3.27   | 3.26.0-0.0.pre / 3.27 | 4회             | 있음                | 없음             |
 | `latest`       | Released in Flutter 3.27   | 3.26.0-0.0.pre / 3.27 | 8회             | 있음                | 있음             |
 
-나중에 추가된 내용이 모두 오염인 것은 아닙니다. Android 16 크래시 회피(`values-35`)는 3.27 시점에는 없던 내용입니다. 반면 `values-night` 스타일에도 같은 속성을 넣으라는 안내는 3.27 판본이 빠뜨린 부분을 2025년 8월에 바로잡은 것입니다. 그래서 정답 표에는 질문마다 어느 판본을 근거로 삼는지와 그 이유를 함께 적습니다.
+나중에 추가된 내용이 모두 오염인 것은 아닙니다. Android 16 크래시 회피(`values-35`)는 3.27 시점에는 없던 내용이고, 2026년 2월에 추가되어 3.35 판본에도 없습니다. 반면 `values-night` 스타일에도 같은 속성을 넣으라는 안내는 3.27 판본이 빠뜨린 부분을 2025년 8월에 바로잡은 것이라 3.32 판본부터 들어 있습니다. 3.32와 3.35 판본에는 "Android 16 이상을 대상으로 하면 opt-out할 수 없다"는 안내도 있습니다. 그래서 정답 표에는 질문마다 어느 판본을 근거로 삼는지와 그 이유를 함께 적습니다.
 
 ## 버전 메타데이터의 한계
 
