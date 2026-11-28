@@ -9,6 +9,7 @@ from fma.evalset import (
     gold_sections,
     is_gold,
     load_questions,
+    passes_label_filter,
 )
 
 RESULTS = ROOT / "results" / "retrieval" / "results.json"
@@ -54,3 +55,10 @@ def test_committed_bm25_results_are_reproducible(index):
                 (i for i, (_, c) in enumerate(ranked, 1) if is_gold(c, q)), None
             )
             assert by_id[q.id]["methods"][name]["rank"] == rank, (q.id, name)
+        ranked = [
+            (s, c)
+            for s, c in index.search(q.question, top_k=len(index.chunks))
+            if passes_label_filter(c)
+        ][: data["top_k"]]
+        rank = next((i for i, (_, c) in enumerate(ranked, 1) if is_gold(c, q)), None)
+        assert by_id[q.id]["methods"]["bm25+label"]["rank"] == rank, q.id

@@ -10,6 +10,7 @@ doc_key, so a doc that moved between snapshots still counts.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -19,6 +20,7 @@ from .evidence import LATEST
 
 QUESTIONS = ROOT / "eval" / "questions.jsonl"
 TARGET = "flutter-3.27"
+TARGET_VERSION = (3, 27)
 
 
 @dataclass(frozen=True)
@@ -58,14 +60,44 @@ def doc_path(chunk: Chunk) -> str:
 
 
 @cache
-def _doc_keys() -> dict[str, str]:
-    keys = {}
+def _docs() -> dict[str, dict]:
+    docs = {}
     for manifest in MANIFESTS:
         path = ROOT / "data" / "manifest" / manifest
         for line in path.open(encoding="utf-8"):
             doc = json.loads(line)
-            keys[doc["doc_id"]] = doc.get("doc_key") or doc["path"]
-    return keys
+            docs[doc["doc_id"]] = doc
+    return docs
+
+
+def _doc_keys() -> dict[str, str]:
+    return {i: d.get("doc_key") or d["path"] for i, d in _docs().items()}
+
+
+# A doc's own version label, in the order the evaluation trusts them: the
+# footer's stable release, the breaking-change index section, then the
+# footer's "Landed in version" (often a pre-release). Guides, release notes,
+# and API docs carry none.
+LABEL_FIELDS = ("stable_release_footer", "stable_release_index", "landed_in")
+MAJOR_MINOR = re.compile(r"(\d+)\.(\d+)")
+
+
+def version_label(doc_id: str) -> tuple[int, int] | None:
+    doc = _docs().get(doc_id, {})
+    for field in LABEL_FIELDS:
+        m = MAJOR_MINOR.match(doc.get(field) or "")
+        if m:
+            return int(m.group(1)), int(m.group(2))
+    return None
+
+
+def passes_label_filter(chunk: Chunk, target: tuple[int, int] = TARGET_VERSION) -> bool:
+    """The label filter: keep a doc whose label is at most the target
+    version, in any snapshot. A doc without a label is kept: nothing says
+    it is later. Unlike the snapshot filter, this cannot tell revisions of
+    one doc apart, since they share a label."""
+    label = version_label(chunk.doc_id)
+    return label is None or label <= target
 
 
 def question_key(q: Question) -> str:
