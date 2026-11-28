@@ -869,27 +869,27 @@ class Auditor:
         variants, combos = self.variant_configs(unchecked)
         configs: list[tuple[str | None, str | dict]] = [(None, "values")]
         configs += [(config_name(c), c) for c in variants or []]
-        found = next(
-            (
-                (label, normal, launch)
-                for label, config in configs
-                for normal, launch in [
-                    (
-                        resolve_opt_out(inp.styles, normal_name, config, self.api),
-                        resolve_opt_out(inp.styles, launch_name, config, self.api),
-                    )
-                ]
-                if normal
-                and launch
-                and not any(
-                    r.unresolved_value or r.missing_parent for r in (normal, launch)
-                )
-                and self.launch_differs(bool(normal.value), bool(launch.value))
-            ),
-            None,
-        )
+
+        def compare(config):
+            """Both resolutions when both are known, else None."""
+            normal = resolve_opt_out(inp.styles, normal_name, config, self.api)
+            launch = resolve_opt_out(inp.styles, launch_name, config, self.api)
+            if normal is None or launch is None:
+                return None
+            if any(r.unresolved_value or r.missing_parent for r in (normal, launch)):
+                return None
+            return normal, launch
+
+        found = None
+        for label, config in configs:
+            pair = compare(config)
+            if pair and self.launch_differs(bool(pair[0].value), bool(pair[1].value)):
+                found = (label, *pair)
+                break
         if found is None:
-            if variants is None:
+            # Other configurations were not compared; say so only when the
+            # default was compared and showed nothing.
+            if variants is None and compare("values") is not None:
                 self.launch_unchecked(
                     launch_name, normal_name, combos, [launch_clue, normal_clue]
                 )
@@ -933,12 +933,20 @@ class Auditor:
             "launch_theme",
             "실행 화면 테마의 opt-out",
             NEEDS_CHECK,
-            f"{prefix}기본 설정에서는 실행 화면의 `{launch_name}` 스타일과 앱 화면의 `{normal_name}` 스타일이 "
-            f"opt-out을 같게 처리합니다. 하지만 리소스 한정자 조합이 {combos}개라서 다른 기기 설정은 비교하지 않았습니다.",
+            f"{prefix}기본 설정에서는 실행 화면의 `{launch_name}` 스타일과 앱 화면의 `{normal_name}` 스타일 사이에 "
+            f"알릴 차이가 없습니다. 하지만 리소스 한정자 조합이 {combos}개라서 다른 기기 설정은 비교하지 않았습니다.",
             clues,
-            [E["launch_switch"]],
-            check="다크 모드 등 다른 설정의 두 스타일에서 opt-out 항목이 같은지 직접 확인하세요.",
+            self.launch_specs,
+            check=self.launch_unchecked_check,
         )
+
+    @property
+    def launch_specs(self) -> list[Spec]:
+        return [E["launch_switch"]]
+
+    launch_unchecked_check = (
+        "다크 모드 등 다른 설정의 두 스타일에서 opt-out 항목이 같은지 직접 확인하세요."
+    )
 
     def launch_message(
         self, where: str, normal_name: str, launch_name: str, launch_opted: bool
@@ -951,7 +959,7 @@ class Auditor:
             f"`{lacks}` 스타일에는 없습니다. 실행 화면은 `{launch_name}` 스타일로 그려지고, "
             f"실행 화면이 사라진 뒤 Flutter가 `{normal_name}` 스타일로 바꿉니다. "
             "그래서 실행 화면과 앱 화면이 시스템 바를 다르게 처리할 수 있습니다.",
-            [E["launch_switch"]],
+            self.launch_specs,
             "실행 화면도 앱 화면과 같게 그리려면 두 스타일의 opt-out 항목을 맞추세요.",
         )
 
@@ -981,6 +989,15 @@ class Android16Auditor(Auditor):
 
     already_state = "Android 16 기기에서 opt-out이 무시되던 상태입니다."
 
+    @property
+    def launch_specs(self) -> list[Spec]:
+        return [A16["opt_out_ignored"], E["launch_switch"]]
+
+    launch_unchecked_check = (
+        "다크 모드 등 다른 설정에서 실행 화면 스타일에만 opt-out 항목이 있는지 직접 확인하세요. "
+        "있다면 targetSdk 36에서는 그 opt-out이 무시되어 실행 화면이 edge-to-edge로 바뀝니다."
+    )
+
     def launch_differs(self, normal: bool, launch: bool) -> bool:
         # After the upgrade Android 16 ignores both opt-outs. The launch
         # screen changes only when its own theme opts out; the app theme's
@@ -995,7 +1012,7 @@ class Android16Auditor(Auditor):
             f"opt-out 항목이 있지만, 앱 화면의 `{normal_name}` 스타일에는 없습니다. "
             f"targetSdk가 {josa(self.api, '이/가')} 되면 Android 16 기기에서는 이 opt-out이 무시되어, "
             "실행 화면도 앱 화면처럼 edge-to-edge로 그려집니다.",
-            [A16["opt_out_ignored"], E["launch_switch"]],
+            self.launch_specs,
             "실행 화면이 상태바·내비게이션 바 뒤까지 그려져도 괜찮은지 확인하세요.",
         )
 

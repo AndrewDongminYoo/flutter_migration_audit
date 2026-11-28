@@ -307,3 +307,35 @@ def test_launch_theme_with_too_many_configurations_needs_check(index, monkeypatc
         )
     f = finding(audit("3.24.5", "3.27.1", inputs, index), "launch_theme")
     assert f is not None and f.verdict == NEEDS_CHECK and "조합" in f.reason
+
+
+def many_configs(inputs):
+    for q in ("values-night", "values-en", "values-ko"):
+        read_styles(
+            styles(LaunchTheme=True, NormalTheme=True), f"{q}/styles.xml", q, inputs
+        )
+    return inputs
+
+
+def test_unresolved_default_is_not_called_equal(index, monkeypatch):
+    from fma.rules import Auditor
+
+    monkeypatch.setattr(Auditor, "MAX_CONFIGS", 1)
+    broken = (
+        '<resources><style name="LaunchTheme" parent="MissingBase"/>'
+        '<style name="NormalTheme" parent="MissingBase"/></resources>'
+    )
+    inputs = many_configs(app(ACTIVITY.format(NIGHT_META), broken))
+    assert finding(audit("3.24.5", "3.27.1", inputs, index), "launch_theme") is None
+
+
+def test_android16_skipped_configurations_name_the_android16_check(index, monkeypatch):
+    from fma.rules import Auditor
+
+    monkeypatch.setattr(Auditor, "MAX_CONFIGS", 1)
+    inputs = many_configs(
+        app(ACTIVITY.format(NIGHT_META), styles(LaunchTheme=True, NormalTheme=True))
+    )
+    f = finding(audit("3.32.5", "3.35.1", inputs, index), "launch_theme")
+    assert f.verdict == NEEDS_CHECK and "실행 화면 스타일에만" in f.check
+    assert any("cannot opt-out" in e.quote for e in f.evidence)
