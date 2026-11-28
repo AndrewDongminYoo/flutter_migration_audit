@@ -1,3 +1,4 @@
+allclose
 anydpi
 AOSP
 BAAI

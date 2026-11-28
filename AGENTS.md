@@ -52,7 +52,7 @@ Invariants:
 
 - The retriever changes only the order of candidates, not the verdicts. The version guard in `evidence.accept` decides what counts as evidence. `tests/test_retrievers.py` and `tests/test_version_guard.py` hold this.
 - A spec uses `snapshot="later_correction"` only when a later docs revision fixes an omission in the target revision. The report labels that evidence.
-- The CLI embedding index holds only the sections that some spec can request (`retrieval.cli_scope`). A new or changed spec changes that scope. The index file name is a hash of the model and the embedded sections, so after such a change you must run `fma index` again.
+- The CLI embedding index holds only the sections that some spec can request (`retrieval.cli_scope`). A new or changed spec changes that scope. The index is one file per snapshot (`retrieval.cli_index_files`), and each file name is a hash of the model and that snapshot's sections. After such a change, run `fma index` again; it rebuilds only the files whose sections changed.
 - The tool is read-only. It never writes to the app it audits.
 
 ## Generated and committed files
