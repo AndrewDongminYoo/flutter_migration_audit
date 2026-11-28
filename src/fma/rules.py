@@ -413,11 +413,16 @@ class Auditor:
         inp = self.inputs
         title = OPT_OUT_TITLE
         if not inp.styles_provided:
+            where = (
+                "기본 소스 세트(src/main)의 styles.xml을 받지 못해(빌드 유형별 소스 세트의 styles.xml만 받았습니다)"
+                if inp.variant_styles
+                else "styles.xml을 받지 못해"
+            )
             self.add(
                 "opt_out",
                 title,
                 NEEDS_CHECK,
-                "styles.xml을 받지 못해 opt-out 여부를 알 수 없습니다.",
+                f"{where} opt-out 여부를 알 수 없습니다.",
                 specs=[E["edge_default"]],
                 check="res/values/styles.xml의 NormalTheme에 "
                 "android:windowOptOutEdgeToEdgeEnforcement 항목이 있는지 확인하세요.",
@@ -465,11 +470,13 @@ class Auditor:
                 ),
             )
             return None
-        judged = {(st.qualifier, st.name): st.opt_out_raw for st in inp.styles}
+        judged = {
+            (st.qualifier, st.name): (st.opt_out_raw, st.parent) for st in inp.styles
+        }
         for st in inp.variant_styles:
             key = (st.qualifier, st.name)
-            if key in judged and judged[key] == st.opt_out_raw:
-                continue  # the same opt-out as the judged style
+            if key not in judged or judged[key] == (st.opt_out_raw, st.parent):
+                continue  # a new style, or the same opt-out and parent
             note = (
                 f"`{st.clue.file}`의 {st.clue.line}행은 빌드 유형별 소스 세트에서 `{st.name}` 스타일을 "
                 "다르게 정의합니다. opt-out은 기본 소스 세트(main)의 스타일로 판단했으므로, "
