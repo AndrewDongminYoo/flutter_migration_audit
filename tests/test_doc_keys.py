@@ -37,3 +37,21 @@ def test_the_moved_doc_counts_as_a_wrong_version(index):
     shared = [c for c in old if c.heading in new]
     assert shared, "the two revisions share section headings"
     assert all(is_wrong_version(c, q, new) for c in shared)
+
+
+def fetch_module():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "fetch_snapshots", ROOT / "scripts" / "fetch_snapshots.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_redirect_targets_keep_only_the_path():
+    """Local review: a destination's query string is not part of the key."""
+    fetch = fetch_module()
+    assert fetch.url_path("/a/b?utm_source=x#top") == "/a/b"
+    assert fetch.url_path("/a/b/") == "/a/b"

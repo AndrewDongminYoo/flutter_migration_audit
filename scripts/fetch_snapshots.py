@@ -21,6 +21,7 @@ import re
 import subprocess
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "data" / "raw"
@@ -147,6 +148,11 @@ def parse_index(text: str) -> dict[str, str]:
     return result
 
 
+def url_path(url: str) -> str:
+    """The path of a site URL, without query, fragment, or trailing slash."""
+    return urlsplit(url).path.rstrip("/") or "/"
+
+
 def redirects(commit: str) -> dict[str, str]:
     """The site's exact-path redirects (firebase.json) at a commit. Rules with
     globs or parameters are skipped: they do not name one page."""
@@ -163,15 +169,16 @@ def redirects(commit: str) -> dict[str, str]:
             continue
         if any(ch in src + dst for ch in "*:{}"):
             continue
-        out[src.rstrip("/") or "/"] = dst.split("#")[0].rstrip("/") or "/"
+        out[url_path(src)] = url_path(dst)
     return out
 
 
 def doc_key(url_path: str, moves: dict[str, str]) -> str:
     """One key for a document across snapshots: its URL path after following
-    the site's redirects, so a page that moved (platform-adaptations moved
-    from platform-integration/ to ui/adaptive-responsive/ in 3.27) keeps its
-    key."""
+    the latest site's redirects, so a page that moved (platform-adaptations
+    moved from platform-integration/ to ui/adaptive-responsive/ in 3.27)
+    keeps its key. Only the latest redirects count: a rule an older site
+    dropped could otherwise move a page that exists again."""
     seen = {url_path}
     while url_path in moves and moves[url_path] not in seen:
         url_path = moves[url_path]
@@ -294,10 +301,7 @@ def main() -> None:
         }
     )
 
-    # Redirects from every snapshot; a later rule for the same page wins.
-    moves: dict[str, str] = {}
-    for snap in snapshots:
-        moves.update(redirects(snap["commit"]))
+    moves = redirects(LATEST_SNAPSHOT[1])
 
     all_records = []
     for snap in snapshots:
