@@ -96,3 +96,20 @@ def test_regions_of_equivalent_languages_are_grouped():
 
     out = unchecked_qualifiers({"values", "values-fil-rPH", "values-tl-rUS"})
     assert set(out) == {"values-fil-rPH", "values-tl-rUS"}
+
+
+def test_region_specificity_comes_before_the_exact_language_code():
+    """Local review: AOSP compares regions first and prefers the device's own
+    language code only as the last tie-breaker."""
+    assert (
+        best_match({"values-fil", "values-tl-rPH"}, device_config("values-fil-rPH"))
+        == "values-tl-rPH"
+    )
+    assert (
+        best_match({"values-tl", "values-fil-rPH"}, device_config("values-tl-rPH"))
+        == "values-fil-rPH"
+    )
+    assert (
+        best_match({"values-fil-rPH", "values-tl-rPH"}, device_config("values-tl-rPH"))
+        == "values-tl-rPH"
+    )

@@ -393,20 +393,19 @@ def best_match(qualifiers: set[str], config: dict) -> str | None:
             top = max(d[kind] for _, d in with_kind)
             with_kind = [(q, d) for q, d in with_kind if d[kind] == top]
         elif kind == "locale":
-            # All remaining locales match. Among equivalent languages the
-            # device's own code wins (isLocaleBetterThan in AOSP), then the
-            # most specific locale.
-            want = locale_parts(str(config.get("locale")))[0]
-            exact = [
-                (q, d) for q, d in with_kind if locale_parts(d["locale"])[0] == want
-            ]
-            with_kind = exact or with_kind
-
+            # All remaining locales match. The most specific locale wins;
+            # among equally specific ones of equivalent languages, the
+            # device's own code wins last (isLocaleBetterThan in AOSP).
             def specificity(d: dict) -> int:
                 return sum(x is not None for x in locale_parts(d["locale"])[1:])
 
             top = max(specificity(d) for _, d in with_kind)
             with_kind = [(q, d) for q, d in with_kind if specificity(d) == top]
+            want = locale_parts(str(config.get("locale")))[0]
+            exact = [
+                (q, d) for q, d in with_kind if locale_parts(d["locale"])[0] == want
+            ]
+            with_kind = exact or with_kind
         candidates = with_kind
     return candidates[0][0] if candidates else None
 
