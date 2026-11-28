@@ -1,0 +1,175 @@
+"""The 3.32 -> 3.35 upgrade, where the default targetSdk moves from 35 to 36
+(Android 16). Android 16 ignores the opt-out for apps that target API 36, so
+the apps that change are the ones that relied on it (issue #18)."""
+
+from pathlib import Path
+
+import pytest
+
+from fma.rules import AFFECTED, NEEDS_CHECK, NOT_AFFECTED, audit, particle
+from fma.signals import AppInputs, discover, read_gradle, read_manifest, read_styles
+from fma.versions import check_range, release_for
+
+SAMPLES = Path(__file__).resolve().parents[1] / "samples"
+FRAMEWORK = "@android:style/Theme.Light.NoTitleBar"
+ITEM = '<item name="android:windowOptOutEdgeToEdgeEnforcement">{}</item>'
+MANIFEST = (
+    '<meta-data android:name="io.flutter.embedding.android.NormalTheme" '
+    'android:resource="@style/NormalTheme" />'
+)
+
+
+def xml(value):
+    item = ITEM.format(value) if value else ""
+    return f'<resources><style name="NormalTheme" parent="{FRAMEWORK}">{item}</style></resources>'
+
+
+def inputs(*styles, gradle="targetSdk = flutter.targetSdkVersion"):
+    inp = AppInputs()
+    read_gradle(gradle, "build.gradle", inp)
+    read_manifest(MANIFEST, "AndroidManifest.xml", inp)
+    for qualifier, text in styles:
+        read_styles(text, f"{qualifier}/styles.xml", qualifier, inp)
+    return inp
+
+
+def finding(report, key):
+    return next(f for f in report.findings if f.key == key)
+
+
+def test_range_is_supported():
+    cur, tgt = check_range("3.32.5", "3.35.1")
+    assert (cur.default_target_sdk, tgt.default_target_sdk) == (35, 36)
+    assert release_for("3.35.0").snapshot_id == "flutter-3.35"
+
+
+def test_particles_follow_the_number():
+    assert particle(35, "을", "를") == "를" and particle(36, "을", "를") == "을"
+    assert particle(35, "이", "가") == "가" and particle(36, "이", "가") == "이"
+    # 로 after a vowel or ㄹ, 으로 after other final consonants.
+    assert [particle(n, "으로", "로", after_l="로") for n in (15, 16, 17, 33)] == [
+        "로",
+        "으로",
+        "로",
+        "으로",
+    ]
+
+
+def test_opted_out_app_loses_the_opt_out_on_android16(index):
+    report = audit("3.32.5", "3.35.1", discover(SAMPLES / "player_opt_out"), index)
+    target = finding(report, "target_sdk")
+    assert target.verdict == AFFECTED
+    assert "API 35에서 API 36(Android 16)으로 바뀝니다" in target.reason
+    f = finding(report, "opt_out")
+    assert f.verdict == AFFECTED and "Android 16" in f.reason
+    assert {e.snapshot_id for e in f.evidence} == {"flutter-3.35"}
+    assert any("cannot opt-out" in e.quote for e in f.evidence)
+    crash = finding(report, "opt_out_android16")
+    assert crash.verdict == NEEDS_CHECK
+    assert [e.later_correction for e in crash.evidence] == [True]
+    mode = finding(report, "ui_mode_immersiveSticky")
+    assert mode.verdict == AFFECTED
+    assert any("ignore this value" in e.quote for e in mode.evidence)
+    assert finding(report, "layout").verdict == AFFECTED
+
+
+def test_app_without_opt_out_was_already_edge_to_edge(index):
+    report = audit("3.32.5", "3.35.1", discover(SAMPLES / "player_default"), index)
+    assert [f.key for f in report.findings] == ["target_sdk", "opt_out"]
+    f = finding(report, "opt_out")
+    assert f.verdict == NOT_AFFECTED and "targetSdk 35" in f.reason
+    assert report.notes
+
+
+def test_explicit_target_35_is_not_changed_by_the_upgrade(index):
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", xml("true")), gradle="targetSdk = 35"),
+        index,
+    )
+    f = finding(report, "target_sdk")
+    assert f.verdict == NOT_AFFECTED and "36으로 올리는 시점" in f.reason
+    assert [x.key for x in report.findings] == ["target_sdk"]
+
+
+def test_explicit_target_36_was_already_android16(index):
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", xml("true")), gradle="targetSdk = 36"),
+        index,
+    )
+    f = finding(report, "target_sdk")
+    assert f.verdict == NOT_AFFECTED and "이미 targetSdk 36을" in f.reason
+
+
+def test_version_resources_without_the_item_avoid_the_android16_case(index):
+    """values-v36 without the opt-out item: Android 15 devices keep the opt-out
+    from values, and Android 16 devices pick a style without the item."""
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", xml("true")), ("values-v36", xml(None))),
+        index,
+    )
+    assert finding(report, "opt_out").verdict == AFFECTED
+    f = finding(report, "opt_out_android16")
+    assert f.verdict == NOT_AFFECTED and "values-v36" in f.reason
+
+
+def test_overlay_colors_stop_working_on_android16(index):
+    inp = inputs(("values", xml("true")))
+    from fma.signals import read_dart
+
+    read_dart(
+        "SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(statusBarColor: Colors.red));",
+        "lib/main.dart",
+        inp,
+    )
+    f = finding(audit("3.32.5", "3.35.1", inp, index), "overlay_colors")
+    assert f.verdict == AFFECTED and {e.snapshot_id for e in f.evidence} == {
+        "flutter-3.35"
+    }
+
+
+def test_unknown_target_is_conditional_on_36(index):
+    inp = inputs(("values", xml("true")), gradle="targetSdk = rootProject.ext.target")
+    later = [f for f in audit("3.32.5", "3.35.1", inp, index).findings][1:]
+    assert any(f.reason.startswith("targetSdk가 36이 된다면: ") for f in later)
+
+
+@pytest.mark.parametrize("sample", ["player_default", "player_opt_out"])
+def test_every_android16_spec_resolves(index, sample):
+    report = audit("3.32.5", "3.35.1", discover(SAMPLES / sample), index)
+    assert not [f.missing_evidence for f in report.findings if f.missing_evidence]
+
+
+def test_docs_style_values_35_is_not_a_version_resource(index):
+    """The later docs say `values-35`; Android's platform version qualifier is
+    `v35`, so that directory is not a version resource and the API 36 device
+    still selects the opt-out from `values`."""
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", xml("true")), ("values-35", xml(None))),
+        index,
+    )
+    f = finding(report, "opt_out_android16")
+    assert f.verdict == NEEDS_CHECK
+    assert "`values-35`" in f.reason and "`values-v35`" in f.reason
+
+
+def test_unchecked_directories_keep_the_android16_check_open(index):
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(
+            ("values", xml("true")),
+            ("values-v36", xml(None)),
+            ("values-xhdpi", xml("true")),
+        ),
+        index,
+    )
+    f = finding(report, "opt_out_android16")
+    assert f.verdict == NEEDS_CHECK and "`values-xhdpi`" in f.reason

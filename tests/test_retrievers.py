@@ -11,15 +11,13 @@ from fma import cli
 from fma.cli import main
 from fma.evidence import resolve
 from fma.retrieval import cli_chunks, cli_dense, cli_scope
-from fma.rules import E, audit, mode_spec
+from fma.rules import all_specs, audit
 from fma.signals import discover
-from fma.versions import release_for
+from fma.versions import target_releases
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples"
-TARGET = release_for("3.27.0")
-SPECS = list(E.values()) + [
-    mode_spec(m) for m in ("leanBack", "immersive", "immersiveSticky", "manual")
-]
+# Every (target release, spec) pair the rules can request.
+CASES = [(t, s) for t in target_releases() for s in all_specs(t)]
 # Set in CI, where the embedding tests must run instead of skipping.
 REQUIRE_INDEX_ENV = "FMA_REQUIRE_EMBEDDING_INDEX"
 
@@ -43,10 +41,11 @@ def test_cli_scope_covers_every_spec(index):
     assert ("flutter-3.24", None) not in scope and all(
         s != "flutter-3.24" for s, _ in scope
     )
-    assert all(k != "release-notes" for _, k in scope)
+    # Only the Android 16 range cites release notes (the targetSdk 36 bump).
+    assert {s for s, k in scope if k == "release-notes"} == {"flutter-3.35"}
     kept = {c.chunk_id for c in cli_chunks(index.chunks)}
-    for spec in SPECS:
-        ev = resolve(spec, TARGET, index)
+    for target, spec in CASES:
+        ev = resolve(spec, target, index)
         if ev is None:
             continue
         chunk = next(
@@ -56,7 +55,7 @@ def test_cli_scope_covers_every_spec(index):
             and c.heading == ev.heading
             and c.url == ev.url
         )
-        assert chunk.chunk_id in kept, spec.key
+        assert chunk.chunk_id in kept, (target.snapshot_id, spec.key)
     assert len(kept) < len(index.chunks) * 0.6
 
 
@@ -64,9 +63,11 @@ def key(ev):
     return (ev.snapshot_id, ev.heading, ev.quote) if ev else None
 
 
-@pytest.mark.parametrize("spec", SPECS, ids=lambda s: s.key)
-def test_same_evidence_with_either_retriever(index, dense, spec):
-    assert key(resolve(spec, TARGET, index)) == key(resolve(spec, TARGET, dense))
+@pytest.mark.parametrize(
+    "target, spec", CASES, ids=[f"{t.snapshot_id}-{s.key}" for t, s in CASES]
+)
+def test_same_evidence_with_either_retriever(index, dense, target, spec):
+    assert key(resolve(spec, target, index)) == key(resolve(spec, target, dense))
 
 
 def test_dense_respects_filters(dense):
@@ -97,11 +98,12 @@ def test_missing_index_fails_before_loading_model(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("sample", ["player_default", "player_opt_out"])
-def test_same_report_with_either_retriever(index, dense, sample):
+@pytest.mark.parametrize("versions", [("3.24.5", "3.27.1"), ("3.32.5", "3.35.1")])
+def test_same_report_with_either_retriever(index, dense, sample, versions):
     inputs = discover(SAMPLES / sample)
-    a, b = audit("3.24.5", "3.27.1", inputs, index), audit(
-        "3.24.5", "3.27.1", inputs, dense
-    )
+    current, target = versions
+    a = audit(current, target, inputs, index)
+    b = audit(current, target, inputs, dense)
     assert [(f.key, f.verdict, [key(e) for e in f.evidence]) for f in a.findings] == [
         (f.key, f.verdict, [key(e) for e in f.evidence]) for f in b.findings
     ]

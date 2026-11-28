@@ -8,6 +8,7 @@ do not say.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from .evidence import Evidence, Spec, resolve
@@ -16,6 +17,7 @@ from .signals import (
     THRESHOLD_KINDS,
     AppInputs,
     Clue,
+    OptOutResolution,
     config_name,
     device_config,
     normalize_config,
@@ -26,6 +28,7 @@ from .signals import (
 from .versions import EDGE_TO_EDGE_API, Release, android_name, check_range
 
 AFFECTED, NOT_AFFECTED, NEEDS_CHECK = "affected", "not_affected", "needs_check"
+OPT_OUT_TITLE = "edge-to-edge opt-out 설정"
 LABELS = {
     AFFECTED: "영향 있음",
     NOT_AFFECTED: "영향 없음",
@@ -34,6 +37,7 @@ LABELS = {
 
 BC = frozenset({"breaking-change"})
 API = frozenset({"api"})
+RELEASE_NOTES = frozenset({"release-notes"})
 GUIDE = frozenset({"guide"})
 EDGE_QUERY = "SystemUiMode edge-to-edge default Android SDK 15 targetSdkVersion opt out"
 
@@ -141,6 +145,90 @@ def mode_spec(mode: str) -> Spec:
     )
 
 
+# Evidence for a target release whose default targetSdk is 36 (Android 16).
+# The 3.35 docs already say that an app targeting 36 cannot opt out. The
+# crash warning and the version-specific resources were added to the website
+# in 2026-02, after the 3.35 window, so they are a later correction.
+A16 = {
+    "target_default": Spec(
+        "target_default_36",
+        "Flutter 3.35 release notes Android 16 Bumping Framework Default TargetSdk to 36",
+        "Bumping Framework Default TargetSdk to 36",
+        kinds=RELEASE_NOTES,
+        heading="Android",
+    ),
+    "opt_out_ignored": Spec(
+        "opt_out_ignored",
+        EDGE_QUERY + " targets Android SDK version 16 or later cannot opt-out",
+        "and you cannot opt-out",
+        kinds=BC,
+    ),
+    "modes_no_opt_out": Spec(
+        "modes_no_opt_out",
+        "SystemChrome setEnabledSystemUIMode Android SDK 16 API 36 other SystemUiModes will NOT work no way to opt out",
+        "There is no way to opt out of",
+        kinds=API,
+        heading="SystemChrome.setEnabledSystemUIMode",
+    ),
+    "overlay_color_api36": Spec(
+        "overlay_color_api36",
+        "SystemChrome setSystemUIOverlayStyle Android SDK 16 API 36 statusBarColor systemNavigationBarColor will not work",
+        "systemNavigationBarColor] will not work.",
+        kinds=API,
+        heading="SystemChrome.setSystemUIOverlayStyle",
+    ),
+    "opt_out_crash": Spec(
+        "opt_out_crash",
+        "Android 16 or later opt out of edge-to-edge might cause your app to crash version-specific resources",
+        "might cause your app to crash",
+        snapshot="later_correction",
+        kinds=BC,
+        heading="Android 16 (or later)",
+    ),
+}
+
+
+def mode_ignored_spec(mode: str) -> Spec:
+    return Spec(
+        f"mode_ignored_{mode}",
+        f"SystemUiMode {mode} Android SDK 16 API 36 Android system will ignore this value",
+        "then the Android system will ignore this value",
+        kinds=API,
+        heading=f"SystemUiMode.{mode}",
+    )
+
+
+UI_MODES = ("leanBack", "immersive", "immersiveSticky", "edgeToEdge", "manual")
+
+
+def all_specs(release: Release) -> list[Spec]:
+    """Every spec the rules for an upgrade to `release` can request."""
+    specs = list(E.values())
+    if release.default_target_sdk > EDGE_TO_EDGE_API:
+        return specs + list(A16.values()) + [mode_ignored_spec(m) for m in UI_MODES]
+    return specs + [mode_spec(m) for m in UI_MODES]
+
+
+def particle(
+    n: int, after_final: str, after_vowel: str, after_l: str | None = None
+) -> str:
+    """The Korean particle that follows the number `n` read aloud (35 is
+    삼십오, 36 is 삼십육). `after_l` is the form used after a final ㄹ, such as
+    로 in 으로/로."""
+    last = n % 10
+    if after_l is not None and last in (1, 7, 8):
+        return after_l
+    return after_final if last in (0, 1, 3, 6, 7, 8) else after_vowel
+
+
+def ro(n: int) -> str:
+    return particle(n, "으로", "로", after_l="로")
+
+
+def android_number(api: int) -> int:
+    return int(re.findall(r"\d+", android_name(api))[-1])
+
+
 @dataclass
 class Finding:
     key: str
@@ -190,8 +278,9 @@ class Auditor:
                 or "근거 문서를 찾지 못했습니다. 판단 전에 공식 문서를 직접 확인하세요."
             )
         if self.conditional and finding.verdict != NEEDS_CHECK:
+            n = self.tgt.default_target_sdk
             finding.reason = (
-                f"targetSdk가 {self.tgt.default_target_sdk}가 된다면: " + finding.reason
+                f"targetSdk가 {n}{particle(n, '이', '가')} 된다면: " + finding.reason
             )
             finding.verdict = NEEDS_CHECK
             finding.check = finding.check or "targetSdk 값을 먼저 확인하세요."
@@ -224,7 +313,7 @@ class Auditor:
                 title,
                 NEEDS_CHECK,
                 f"{where}. 기본값(flutter.targetSdkVersion)을 쓰면 {cur}에서 {tgt}로 바뀝니다.",
-                specs=[E["target_default"]],
+                specs=[self.target_default_spec],
                 check="android/app/build.gradle(.kts)의 targetSdk 값을 확인하세요.",
             )
             self.conditional = True
@@ -234,9 +323,9 @@ class Auditor:
                 "target_sdk",
                 title,
                 AFFECTED,
-                f"targetSdk가 flutter.targetSdkVersion을 따르므로 API {cur}에서 API {tgt}({android_name(tgt)})로 바뀝니다.",
+                f"targetSdk가 flutter.targetSdkVersion을 따르므로 API {cur}에서 API {tgt}({android_name(tgt)}){ro(android_number(tgt))} 바뀝니다.",
                 [ts.clue],
-                [E["target_default"]],
+                [self.target_default_spec],
                 [compare],
             )
             return True
@@ -245,8 +334,8 @@ class Auditor:
                 "target_sdk",
                 title,
                 NOT_AFFECTED,
-                f"targetSdk를 {ts.explicit}로 직접 지정해서 이번 업그레이드로는 바뀌지 않습니다. "
-                f"{EDGE_TO_EDGE_API}로 올리는 시점에 같은 영향이 생깁니다.",
+                f"targetSdk를 {ts.explicit}{ro(ts.explicit)} 직접 지정해서 이번 업그레이드로는 바뀌지 않습니다. "
+                f"{EDGE_TO_EDGE_API}{ro(EDGE_TO_EDGE_API)} 올리는 시점에 같은 영향이 생깁니다.",
                 [ts.clue],
                 [E["target_explicit"]],
             )
@@ -254,18 +343,34 @@ class Auditor:
                 f"targetSdk가 {EDGE_TO_EDGE_API} 미만으로 고정되어 있어 시스템 바 관련 나머지 항목은 확인하지 않았습니다."
             )
             return False
+        if ts.explicit is not None and ts.explicit < tgt:
+            # Only when the target raises the default past EDGE_TO_EDGE_API
+            # (35 -> 36): an explicit 35 does not move with Flutter.
+            self.add(
+                "target_sdk",
+                title,
+                NOT_AFFECTED,
+                f"targetSdk를 {ts.explicit}{ro(ts.explicit)} 직접 지정해서 이번 업그레이드로는 바뀌지 않습니다. "
+                f"{tgt}{ro(tgt)} 올리는 시점에 {android_name(tgt)} 동작 변경의 영향이 생깁니다.",
+                [ts.clue],
+                [A16["opt_out_ignored"]],
+            )
+            self.notes.append(
+                f"targetSdk가 {ts.explicit}{ro(ts.explicit)} 고정되어 있어 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
+            )
+            return False
         if ts.explicit is not None and ts.explicit == tgt:
             self.add(
                 "target_sdk",
                 title,
                 NOT_AFFECTED,
-                f"이미 targetSdk {tgt}를 직접 지정하고 있어 Flutter 버전과 관계없이 edge-to-edge가 적용되던 상태입니다. "
-                "이번 업그레이드로 바뀌는 것은 없습니다.",
+                f"이미 targetSdk {tgt}{particle(tgt, '을', '를')} 직접 지정하고 있어 Flutter 버전과 관계없이 "
+                f"{self.already_state} 이번 업그레이드로 바뀌는 것은 없습니다.",
                 [ts.clue],
-                [E["edge_default"]],
+                [self.already_spec],
             )
             self.notes.append(
-                f"업그레이드 전부터 targetSdk {tgt}였으므로 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
+                f"업그레이드 전부터 targetSdk {tgt}{particle(tgt, '이었', '였')}으므로 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
             )
             return False
         if ts.explicit is not None:
@@ -273,7 +378,7 @@ class Auditor:
                 "target_sdk",
                 title,
                 NEEDS_CHECK,
-                f"targetSdk {ts.explicit}는 이번 구간 문서({self.tgt_label} 기준 {android_name(tgt)})가 다루지 않는 값입니다.",
+                f"targetSdk {ts.explicit}{particle(ts.explicit, '은', '는')} 이번 구간 문서({self.tgt_label} 기준 {android_name(tgt)})가 다루지 않는 값입니다.",
                 [ts.clue],
                 check=f"{android_name(tgt + 1)} 이상을 대상으로 할 때의 동작은 이 구간 문서로 판단할 수 없습니다. "
                 f"{android_name(tgt + 1)} 동작 변경 문서를 직접 확인하세요.",
@@ -285,16 +390,32 @@ class Auditor:
             NEEDS_CHECK,
             f"targetSdk가 `{ts.raw}`로 설정되어 있어 실제 값을 알 수 없습니다.",
             [ts.clue],
-            [E["target_default"]],
+            [self.target_default_spec],
             check=f"`{ts.raw}`가 가리키는 값을 확인하세요. flutter.targetSdkVersion이면 {cur}→{tgt}로 바뀝니다.",
         )
         self.conditional = True
         return True
 
-    def opt_out(self) -> bool | None:
-        """Return True if opted out, False if not, None if unknown."""
+    already_state = "edge-to-edge가 적용되던 상태입니다."
+
+    @property
+    def target_default_spec(self) -> Spec:
+        return E["target_default"]
+
+    @property
+    def already_spec(self) -> Spec:
+        return E["edge_default"]
+
+    def theme(self) -> tuple[str, list[Clue]]:
+        name, clue = self.inputs.normal_theme or ("NormalTheme", None)
+        return name, [clue] if clue else []
+
+    def opt_out_state(self, api: int) -> OptOutResolution | None:
+        """Resolve the theme's opt-out on a device that runs `api`. Return the
+        resolution when the value is known (set, `false`, or absent);
+        otherwise add a "needs check" finding and return None."""
         inp = self.inputs
-        title = "edge-to-edge opt-out 설정"
+        title = OPT_OUT_TITLE
         if not inp.styles_provided:
             self.add(
                 "opt_out",
@@ -306,9 +427,8 @@ class Auditor:
                 "android:windowOptOutEdgeToEdgeEnforcement 항목이 있는지 확인하세요.",
             )
             return None
-        theme_name, theme_clue = inp.normal_theme or ("NormalTheme", None)
-        clues = [theme_clue] if theme_clue else []
-        day = resolve_opt_out(inp.styles, theme_name, "values", self.api)
+        theme_name, clues = self.theme()
+        day = resolve_opt_out(inp.styles, theme_name, "values", api)
         if day is None:
             self.add(
                 "opt_out",
@@ -320,6 +440,43 @@ class Auditor:
             )
             return None
         own = day.styles[0]  # the theme as Android selects it (may be values-v21 etc.)
+        if day.value:
+            return day
+        if day.unresolved_value:
+            self.add(
+                "opt_out",
+                title,
+                NEEDS_CHECK,
+                f"`{day.source}`의 opt-out 항목 값이 `{day.unresolved_value}`라서 참인지 거짓인지 알 수 없습니다. "
+                "이 항목이 있으면 부모 스타일의 값은 쓰이지 않습니다.",
+                clues + [day.clue],
+                [E["opt_out_works"]],
+                check=f"`{day.unresolved_value}`가 가리키는 값(예: res/values/bools.xml)을 확인하세요.",
+            )
+            return None
+        if day.missing_parent:
+            self.add(
+                "opt_out",
+                title,
+                NEEDS_CHECK,
+                f"`{theme_name}`의 부모 스타일 `{day.missing_parent}`이 제공된 styles.xml에 없어, "
+                "opt-out 항목을 상속받는지 확인할 수 없습니다.",
+                clues + [own.clue],
+                [E["opt_out_parent"]],
+                check=f"`{day.missing_parent}` 스타일 정의가 들어 있는 styles.xml을 함께 넣어 주세요.",
+            )
+            return None
+        return day
+
+    def opt_out(self) -> bool | None:
+        """Return True if opted out, False if not, None if unknown."""
+        day = self.opt_out_state(self.api)
+        if day is None:
+            return None
+        inp = self.inputs
+        title = OPT_OUT_TITLE
+        theme_name, clues = self.theme()
+        own = day.styles[0]
         inherited = day.source is not None and day.source != theme_name
         if day.value:
             caveat = (
@@ -352,30 +509,6 @@ class Auditor:
                 # assume edge-to-edge still run.
                 return None
             return True
-        if day.unresolved_value:
-            self.add(
-                "opt_out",
-                title,
-                NEEDS_CHECK,
-                f"`{day.source}`의 opt-out 항목 값이 `{day.unresolved_value}`라서 참인지 거짓인지 알 수 없습니다. "
-                "이 항목이 있으면 부모 스타일의 값은 쓰이지 않습니다.",
-                clues + [day.clue],
-                [E["opt_out_works"]],
-                check=f"`{day.unresolved_value}`가 가리키는 값(예: res/values/bools.xml)을 확인하세요.",
-            )
-            return None
-        if day.missing_parent:
-            self.add(
-                "opt_out",
-                title,
-                NEEDS_CHECK,
-                f"`{theme_name}`의 부모 스타일 `{day.missing_parent}`이 제공된 styles.xml에 없어, "
-                "opt-out 항목을 상속받는지 확인할 수 없습니다.",
-                clues + [own.clue],
-                [E["opt_out_parent"]],
-                check=f"`{day.missing_parent}` 스타일 정의가 들어 있는 styles.xml을 함께 넣어 주세요.",
-            )
-            return None
         if day.value is False:
             reason = (
                 "opt-out 항목이 `false`로 설정되어 있어"
@@ -585,17 +718,20 @@ class Auditor:
                     [E["already_migrated"]],
                 )
             else:
-                self.add(
-                    f"ui_mode_{mode}",
-                    f"{title}: {mode}",
-                    AFFECTED,
-                    f"SystemUiMode.{mode} 모드는 targetSdk {EDGE_TO_EDGE_API} 이상에서 opt-out 없이는 동작하지 않습니다.",
-                    clues,
-                    [mode_spec(mode)],
-                    [
-                        f"{self.device} 에뮬레이터에서 {mode} 모드를 켜는 화면에 들어가 상태바·내비게이션 바가 문서대로 숨는지 확인한다."
-                    ],
-                )
+                self.mode_finding(f"{title}: {mode}", mode, clues)
+
+    def mode_finding(self, title: str, mode: str, clues: list[Clue]) -> None:
+        self.add(
+            f"ui_mode_{mode}",
+            title,
+            AFFECTED,
+            f"SystemUiMode.{mode} 모드는 targetSdk {EDGE_TO_EDGE_API} 이상에서 opt-out 없이는 동작하지 않습니다.",
+            clues,
+            [mode_spec(mode)],
+            [
+                f"{self.device} 에뮬레이터에서 {mode} 모드를 켜는 화면에 들어가 상태바·내비게이션 바가 문서대로 숨는지 확인한다."
+            ],
+        )
 
     def layout(self) -> None:
         inp = self.inputs
@@ -717,8 +853,179 @@ class Auditor:
         self.overlay_colors()
 
 
+class Android16Auditor(Auditor):
+    """Rules for an upgrade that moves the default targetSdk from 35 to 36.
+
+    Edge-to-edge already applied at 35, so an app without the opt-out does
+    not change. An app with the opt-out keeps it on Android 15 devices but
+    loses it on Android 16 devices, so the checks that assume edge-to-edge
+    run for it. The opt-out is read on an API 35 device (before the
+    upgrade); the style an API 36 device selects is checked for the item
+    the later docs warn about.
+    """
+
+    already_state = "Android 16 기기에서 opt-out이 무시되던 상태입니다."
+
+    @property
+    def target_default_spec(self) -> Spec:
+        return A16["target_default"]
+
+    @property
+    def already_spec(self) -> Spec:
+        return A16["opt_out_ignored"]
+
+    def opt_out(self) -> bool | None:
+        """Return True if the upgrade leaves the app as it was (stop), False
+        if Android 16 changes it, None if unknown."""
+        day = self.opt_out_state(EDGE_TO_EDGE_API)
+        if day is None:
+            return None
+        theme_name, clues = self.theme()
+        own = day.styles[0]
+        inherited = day.source is not None and day.source != theme_name
+        before, after = android_name(EDGE_TO_EDGE_API), android_name(self.api)
+        if not day.value:
+            cause = (
+                "opt-out 항목이 `false`로 설정되어 있어"
+                + (f"(`{day.source}`에서 상속)" if inherited else "")
+                if day.value is False
+                else f"`{theme_name}`과 그 부모 스타일에 opt-out 항목이 없어"
+            )
+            self.add(
+                "opt_out",
+                OPT_OUT_TITLE,
+                NOT_AFFECTED,
+                f"{cause} 업그레이드 전(targetSdk {EDGE_TO_EDGE_API})부터 앱이 edge-to-edge로 그려지고 있었습니다. "
+                "이번 업그레이드로 바뀌는 것은 없습니다.",
+                clues + [own.clue] + ([day.clue] if day.value is False else []),
+                [E["edge_default"]],
+            )
+            self.notes.append(
+                "업그레이드 전부터 edge-to-edge였으므로 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
+            )
+            return True
+        where = (
+            f"`{theme_name}`이 부모 스타일 `{day.source}`에서 opt-out 항목을 상속받아"
+            if inherited
+            else f"`{theme_name}`에 opt-out 항목이 있어"
+        )
+        self.add(
+            "opt_out",
+            OPT_OUT_TITLE,
+            AFFECTED,
+            f"{where} {before} 기기에서는 지금처럼 시스템 바 바깥에 그려집니다. "
+            f"하지만 targetSdk가 {self.api}{particle(self.api, '이', '가')} 되면 {after} 기기에서는 "
+            "opt-out이 무시되어 앱이 edge-to-edge로 그려집니다.",
+            clues + ([own.clue] if inherited else []) + [day.clue],
+            [A16["opt_out_ignored"]],
+            [
+                f"{self.device} 에뮬레이터에서 앱 화면이 상태바·내비게이션 바 뒤까지 그려지는지 확인하고, "
+                f"{before}(API {EDGE_TO_EDGE_API}) 에뮬레이터와 비교한다."
+            ],
+        )
+        self.android16_style(theme_name)
+        return False
+
+    def android16_style(self, theme_name: str) -> None:
+        """The later docs warn that the opt-out item may crash an app on
+        Android 16 and suggest version-specific resources. Report whether the
+        style an API 36 device selects still carries the item."""
+        styles = resolve_opt_out(self.inputs.styles, theme_name, "values", self.api)
+        if styles is None:
+            return
+        used = " → ".join(f"{s.qualifier}/{s.name}" for s in styles.styles)
+        title = f"{android_name(self.api)} 기기의 opt-out 항목"
+        unchecked = sorted(
+            unchecked_qualifiers({s.qualifier for s in self.inputs.styles})
+        )
+        caveat = ""
+        if unchecked:
+            caveat = (
+                " 이 판단은 "
+                + ", ".join(f"`{q}`" for q in unchecked)
+                + " 디렉터리를 고려하지 않았습니다."
+            )
+            for q in unchecked:
+                if m := re.fullmatch(r"values-(\d+)", q):
+                    caveat += (
+                        f" 플랫폼 버전 한정자는 `values-v{m[1]}`처럼 `v`를 붙여 씁니다. "
+                        f"`{q}`는 버전별 리소스로 인식되지 않습니다."
+                    )
+        unchecked_clues = [
+            s.clue for s in self.inputs.styles if s.qualifier in unchecked
+        ][:5]
+        if styles.source is not None or unchecked:
+            self.add(
+                "opt_out_android16",
+                title,
+                NEEDS_CHECK,
+                (
+                    f"{self.device} 기기에서 Android가 고르는 스타일 체인({used})에 opt-out 항목이 남아 있습니다"
+                    f"(`{styles.source}`)."
+                    if styles.source is not None
+                    else f"{self.device} 기기에서 Android가 고르는 스타일 체인({used})에는 opt-out 항목이 없습니다."
+                )
+                + " 이후 문서는 Android 16 이상에서 이 항목을 쓰면 앱이 크래시할 수 있다며, "
+                "버전별 리소스로 이 항목을 빼라고 안내합니다." + caveat,
+                [s.clue for s in styles.styles]
+                + ([styles.clue] if styles.clue else [])
+                + unchecked_clues,
+                [A16["opt_out_crash"]],
+                [
+                    f"{self.device} 에뮬레이터에서 앱을 실행해 첫 화면까지 크래시 없이 열리는지 확인한다."
+                ],
+                check="API 36 이상 기기에서 쓰이는 버전별 스타일에서 opt-out 항목을 빼는지 검토하세요.",
+            )
+        else:
+            self.add(
+                "opt_out_android16",
+                title,
+                NOT_AFFECTED,
+                f"{self.device} 기기에서 Android가 고르는 스타일 체인({used})에는 opt-out 항목이 없습니다. "
+                "이후 문서가 크래시를 피하려고 안내하는 구성과 같습니다.",
+                [s.clue for s in styles.styles],
+                [A16["opt_out_crash"]],
+            )
+
+    def mode_finding(self, title: str, mode: str, clues: list[Clue]) -> None:
+        self.add(
+            f"ui_mode_{mode}",
+            title,
+            AFFECTED,
+            f"targetSdk {self.api}부터는 {android_name(self.api)} 기기에서 Android가 SystemUiMode.{mode} 값을 무시하고, "
+            "opt-out으로도 되돌릴 수 없습니다.",
+            clues,
+            [mode_ignored_spec(mode), A16["modes_no_opt_out"]],
+            [
+                f"{self.device} 에뮬레이터에서 {mode} 모드를 켜는 화면에 들어가 상태바·내비게이션 바가 어떻게 보이는지 확인한다."
+            ],
+        )
+
+    def overlay_colors(self) -> None:
+        if not self.inputs.overlay_colors:
+            return
+        self.add(
+            "overlay_colors",
+            "상태바·내비게이션 바 색상 지정",
+            AFFECTED,
+            f"시스템 바 색상을 직접 지정하고 있습니다. targetSdk {self.api}부터는 opt-out할 수 없어 "
+            f"{android_name(self.api)} 기기에서 statusBarColor와 systemNavigationBarColor가 동작하지 않습니다.",
+            self.inputs.overlay_colors,
+            [A16["overlay_color_api36"]],
+            [
+                f"{self.device} 에뮬레이터에서 지정한 색상이 상태바·내비게이션 바에 보이는지 확인한다."
+            ],
+        )
+
+
+def auditor_class(release: Release) -> type[Auditor]:
+    if release.default_target_sdk > EDGE_TO_EDGE_API:
+        return Android16Auditor
+    return Auditor
+
+
 def audit(current: str, target: str, inputs: AppInputs, index: Retriever) -> Report:
     cur, tgt = check_range(current, target)
-    auditor = Auditor(cur, tgt, inputs, index)
+    auditor = auditor_class(tgt)(cur, tgt, inputs, index)
     auditor.run()
     return Report(current, target, inputs.files, auditor.findings, auditor.notes)

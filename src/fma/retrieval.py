@@ -28,8 +28,6 @@ class Retriever(Protocol):
 
 _CACHE: dict[str, Retriever] = {}
 
-UI_MODES = ("leanBack", "immersive", "immersiveSticky", "edgeToEdge", "manual")
-
 
 def cli_scope() -> set[tuple[str, str | None]]:
     """(snapshot, kind) pairs that some evidence spec can request.
@@ -40,12 +38,12 @@ def cli_scope() -> set[tuple[str, str | None]]:
     scope automatically.
     """
     from .evidence import required_snapshot
-    from .rules import E, mode_spec
+    from .rules import all_specs
     from .versions import target_releases
 
     scope: set[tuple[str, str | None]] = set()
     for target in target_releases():
-        for spec in [*E.values(), *(mode_spec(m) for m in UI_MODES)]:
+        for spec in all_specs(target):
             snapshot = required_snapshot(spec, target)
             for kind in spec.kinds or [None]:
                 scope.add((snapshot, kind))
