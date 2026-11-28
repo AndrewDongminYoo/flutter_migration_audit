@@ -426,6 +426,7 @@ class AppInputs:
     dart_provided: bool = False
     target_sdk: TargetSdk | None = None
     normal_theme: tuple[str, Clue] | None = None
+    launch_theme: tuple[str, Clue] | None = None
     styles: list[Style] = field(default_factory=list)
     ui_modes: list[tuple[str, Clue]] = field(default_factory=list)
     safe_areas: list[Clue] = field(default_factory=list)
@@ -457,22 +458,78 @@ def read_gradle(text: str, name: str, inputs: AppInputs) -> None:
 
 # --- AndroidManifest.xml --------------------------------------------------
 
-NORMAL_THEME = re.compile(
-    r'android:name="io\.flutter\.embedding\.android\.NormalTheme"[^>]*?'
-    r'android:resource="@style/([\w.]+)"',
-    re.DOTALL,
+NORMAL_THEME_META = "io.flutter.embedding.android.NormalTheme"
+MANIFEST_TAG = re.compile(
+    r"<(application|activity|meta-data)\b([^>]*?)(/?)>", re.DOTALL
 )
+ACTIVITY_END = re.compile(r"</activity\s*>")
+APP_STYLE = re.compile(r"@style/([\w.]+)$")
+
+
+def _style_attr(
+    text: str, name: str, tag: re.Match, attr: str
+) -> tuple[str, Clue] | None:
+    """The app style an attribute of the tag names, with the line that names it."""
+    for m in ATTR.finditer(tag.group(2)):
+        if m.group(1) != attr:
+            continue
+        style = APP_STYLE.match((m.group(2) or m.group(3) or "").strip())
+        if not style:
+            return None  # a framework theme such as @android:style/...
+        line = text.count("\n", 0, tag.start(2) + m.start()) + 1
+        return style.group(1), Clue(name, line, text.splitlines()[line - 1])
+    return None
 
 
 def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
+    """Read the FlutterActivity's themes. The NormalTheme meta-data names the
+    theme Flutter switches to after the launch screen; the activity's
+    android:theme (or the application's) is the launch theme. The activity is
+    the one with the meta-data, else the launcher, else the only one."""
     inputs.manifest_provided = True
-    m = NORMAL_THEME.search(text)
-    if m:
-        line = text.count("\n", 0, m.start(1)) + 1
-        inputs.normal_theme = (
-            m.group(1),
-            Clue(name, line, text.splitlines()[line - 1]),
-        )
+    body = XML_COMMENT.sub(_blank, text)
+    app_theme = None
+    loose = None  # NormalTheme meta-data outside any activity (a snippet)
+    activities = []  # (launch theme, normal theme, launcher)
+    current = None
+    end = -1
+    for tag in MANIFEST_TAG.finditer(body):
+        kind = tag.group(1)
+        if current is not None and tag.start() > end:
+            current = None
+        if kind == "application":
+            app_theme = _style_attr(text, name, tag, "android:theme")
+        elif kind == "activity":
+            close = ACTIVITY_END.search(body, tag.end())
+            end = tag.end() if tag.group(3) or not close else close.end()
+            current = {
+                "launch": _style_attr(text, name, tag, "android:theme"),
+                "normal": None,
+                "launcher": "android.intent.category.LAUNCHER" in body[tag.end() : end],
+            }
+            activities.append(current)
+        else:
+            attrs = {
+                m.group(1): m.group(2) or m.group(3)
+                for m in ATTR.finditer(tag.group(2))
+            }
+            if attrs.get("android:name") == NORMAL_THEME_META:
+                theme = _style_attr(text, name, tag, "android:resource")
+                if current is not None:
+                    current["normal"] = theme
+                else:
+                    loose = theme
+    chosen = (
+        next((a for a in activities if a["normal"]), None)
+        or next((a for a in activities if a["launcher"]), None)
+        or (activities[0] if len(activities) == 1 else None)
+    )
+    if chosen:
+        inputs.normal_theme = chosen["normal"]
+        inputs.launch_theme = chosen["launch"] or app_theme
+    elif not activities:
+        inputs.normal_theme = loose
+        inputs.launch_theme = app_theme
 
 
 # --- res/values*/styles.xml -----------------------------------------------
