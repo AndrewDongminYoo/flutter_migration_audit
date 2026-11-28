@@ -187,9 +187,9 @@ def test_unchecked_directories_keep_the_android16_check_open(index):
         ),
         index,
     )
-    assert finding(report, "opt_out").verdict == NOT_AFFECTED
-    f = finding(report, "opt_out_variant")
+    f = finding(report, "opt_out")
     assert f.verdict == NEEDS_CHECK and "`values-xhdpi`" in f.reason
+    assert "layout" in [x.key for x in report.findings]
 
 
 def test_opt_out_only_in_night_styles_is_lost(index):
@@ -253,3 +253,45 @@ def test_quote_is_the_bullet_item_that_holds_the_sentence(text, quote):
 
     chunk = Chunk("c#0", "c", "flutter-3.35", "release-notes", "t", "h", text, "u", "r")
     assert quote_for(chunk, "needle sentence") == quote
+
+
+UNRESOLVED = (
+    '<resources><style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">'
+    '<item name="android:windowOptOutEdgeToEdgeEnforcement">@bool/opt_out</item>'
+    "</style></resources>"
+)
+MISSING_PARENT = (
+    '<resources><style name="NormalTheme" parent="Base.Theme"/></resources>'
+)
+
+
+@pytest.mark.parametrize("night", [UNRESOLVED, MISSING_PARENT])
+def test_unknown_night_style_keeps_the_check_open(index, night):
+    """Subagent review: an unresolved value or a missing parent in a
+    non-default configuration is not reported as "no opt-out"."""
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", xml(None)), ("values-night", night)),
+        index,
+    )
+    f = finding(report, "opt_out")
+    assert f.verdict == NEEDS_CHECK and "`values-night`" in f.reason
+    assert "다른 기기 설정" not in f.reason or "적용되지 않습니다" not in f.reason
+    assert "layout" in [x.key for x in report.findings]
+
+
+def test_each_style_chain_is_named_with_its_configurations(index):
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(
+            ("values", xml(None)),
+            ("values-night", xml("true")),
+            ("values-en", xml("true")),
+        ),
+        index,
+    )
+    reason = finding(report, "opt_out").reason
+    assert "`values-night`(values-night/NormalTheme)" in reason
+    assert "`values-en`" in reason and "(values-en/NormalTheme)" in reason

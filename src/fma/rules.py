@@ -30,8 +30,6 @@ from .versions import EDGE_TO_EDGE_API, Release, android_name, check_range
 
 AFFECTED, NOT_AFFECTED, NEEDS_CHECK = "affected", "not_affected", "needs_check"
 OPT_OUT_TITLE = "edge-to-edge opt-out 설정"
-# This upgrade changes the opt-out only on Android 16 devices.
-ONLY_ANDROID16 = "이번 업그레이드로 opt-out이 무시되는 것은 Android 16 기기뿐입니다."
 LABELS = {
     AFFECTED: "영향 있음",
     NOT_AFFECTED: "영향 없음",
@@ -863,48 +861,85 @@ class Android16Auditor(Auditor):
             return None
         theme_name, clues = self.theme()
         if day.value:
-            self.lost_opt_out(day, theme_name, clues, None)
+            self.lost_opt_out([(None, day)], theme_name, clues)
             return False
         unchecked = set(unchecked_qualifiers({s.qualifier for s in self.inputs.styles}))
         configs, combos = self.variant_configs(unchecked)
-        if configs is None:
-            self.add(
-                "opt_out_variant",
-                "다른 기기 설정의 opt-out",
-                NEEDS_CHECK,
-                f"제공된 리소스 한정자 조합이 {combos}개라서 모두 확인하지 않았습니다. "
-                f"{self.device} 기기의 기본 설정에서는 opt-out 항목이 없습니다.",
-                check="언어·다크 모드·화면 크기 등 한정자별로 opt-out 항목이 있는지 직접 확인하세요.",
-            )
-            return True
-        opted: list[tuple[dict, OptOutResolution]] = []
-        for config in configs:
+        opted: dict[tuple, tuple[list[dict], OptOutResolution]] = {}
+        unknown: dict[tuple, tuple[list[dict], OptOutResolution]] = {}
+        for config in configs or []:
             result = resolve_opt_out(self.inputs.styles, theme_name, config)
-            if result is None or not result.value:
+            if result is None:
                 continue
-            chain = tuple((s.qualifier, s.name) for s in result.styles)
-            if any(
-                covers(c, config)
-                and tuple((s.qualifier, s.name) for s in r.styles) == chain
-                for c, r in opted
-            ):
-                continue  # a smaller configuration already shows this chain
-            opted.append((config, result))
+            if result.value:
+                groups = opted
+            elif result.unresolved_value or result.missing_parent:
+                groups = unknown
+            else:
+                continue
+            chain = (
+                tuple((s.qualifier, s.name) for s in result.styles),
+                result.unresolved_value,
+                result.missing_parent,
+            )
+            seen, _ = groups.setdefault(chain, ([], result))
+            if not any(covers(c, config) for c in seen):
+                seen.append(
+                    config
+                )  # a smaller configuration may show this chain already
         if opted:
-            config, result = opted[0]
             self.lost_opt_out(
-                result, theme_name, clues, [config_name(c) for c, _ in opted]
+                [([config_name(c) for c in cs], r) for cs, r in opted.values()],
+                theme_name,
+                clues,
             )
             return False
         own = day.styles[0]
         used = " → ".join(f"{s.qualifier}/{s.name}" for s in day.styles)
-        cause = (
-            f"{self.device} 기기가 고르는 스타일({used})에서 opt-out 항목이 `false`로 설정되어 있어"
+        default = (
+            f"{self.device} 기기의 기본 설정이 고르는 스타일({used})에서 opt-out 항목이 `false`로 설정되어 있어"
             if day.value is False
-            else f"{self.device} 기기가 고르는 스타일({used})에 opt-out 항목이 없어"
+            else f"{self.device} 기기의 기본 설정이 고르는 스타일({used})에 opt-out 항목이 없어"
         )
+        default_clues = clues + [own.clue] + ([day.clue] if day.value is False else [])
+        open_parts: list[str] = []
+        open_clues: list[Clue] = []
+        if configs is None:
+            open_parts.append(
+                f"리소스 한정자 조합이 {combos}개라서 다른 기기 설정은 확인하지 않았습니다."
+            )
+        for cs, r in unknown.values():
+            names = ", ".join(f"`{config_name(c)}`" for c in cs)
+            if r.unresolved_value:
+                open_parts.append(
+                    f"{names} 설정의 스타일은 opt-out 항목 값이 `{r.unresolved_value}` 리소스라서 확인할 수 없습니다."
+                )
+            else:
+                open_parts.append(
+                    f"{names} 설정의 스타일은 부모인 `{r.missing_parent}` 스타일이 입력에 없어 확인할 수 없습니다."
+                )
+            open_clues += [s.clue for s in r.styles] + ([r.clue] if r.clue else [])
+        caveat, unchecked_clues = self.unchecked_caveat()
+        if open_parts or caveat:
+            self.add(
+                "opt_out",
+                OPT_OUT_TITLE,
+                NEEDS_CHECK,
+                f"{default} 이 설정은 업그레이드 전부터 edge-to-edge로 그려지고 있었습니다. "
+                + " ".join(open_parts)
+                + caveat
+                + " 확인하지 못한 설정에서 opt-out이 적용된다면, 그 설정의 Android 16 기기에서는 "
+                f"targetSdk가 {josa(self.api, '이/가')} 된 뒤 opt-out이 무시됩니다.",
+                default_clues + open_clues + unchecked_clues,
+                [A16["opt_out_ignored"]],
+                [
+                    f"해당 설정의 {self.device} 에뮬레이터에서 첫 화면 상단이 상태바 뒤로 들어가는지 확인한다."
+                ],
+                check="확인하지 못한 설정의 스타일에서 opt-out 항목 값을 직접 확인하세요.",
+            )
+            return None
         others = (
-            " 입력에 있는 다른 기기 설정(다크 모드 등)에서도 opt-out 항목이 적용되지 않습니다."
+            " 입력에 있는 다른 기기 설정(다크 모드 등)에도 opt-out 항목이 없습니다."
             if configs
             else ""
         )
@@ -912,69 +947,79 @@ class Android16Auditor(Auditor):
             "opt_out",
             OPT_OUT_TITLE,
             NOT_AFFECTED,
-            f"{cause} 업그레이드 전(targetSdk {EDGE_TO_EDGE_API})부터 Android 16 기기에서도 "
+            f"{default} 업그레이드 전(targetSdk {EDGE_TO_EDGE_API})부터 Android 16 기기에서도 "
             f"앱이 edge-to-edge로 그려지고 있었습니다.{others} 이번 업그레이드로 바뀌는 것은 없습니다.",
-            clues + [own.clue] + ([day.clue] if day.value is False else []),
+            default_clues,
             [E["edge_default"]],
         )
         self.notes.append(
             "업그레이드 전부터 edge-to-edge였으므로 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
         )
-        self.unchecked_dirs()
         return True
 
     def lost_opt_out(
         self,
-        result: OptOutResolution,
+        groups: list[tuple[list[str] | None, OptOutResolution]],
         theme_name: str,
         clues: list[Clue],
-        configs: list[str] | None,
     ) -> None:
         """Report an opt-out that Android 16 devices apply now and ignore
-        after the upgrade. `configs` names the device configurations (such
-        as values-night) when the default configuration has no opt-out."""
-        own = result.styles[0]
-        inherited = result.source is not None and result.source != theme_name
-        used = " → ".join(f"{s.qualifier}/{s.name}" for s in result.styles)
-        if configs:
-            names = ", ".join(f"`{n}`" for n in configs)
-            where = (
-                f"{self.device} 기기의 기본 설정에는 opt-out 항목이 없지만, {names} 설정에서 고르는 "
-                f"스타일 체인({used})에는 opt-out 항목이 있어"
-            )
-        elif inherited:
-            where = (
-                f"{self.device} 기기가 고르는 `{own.qualifier}/{theme_name}` 스타일이 부모 스타일 "
-                f"`{result.source}`에서 opt-out 항목을 상속받아"
-            )
+        after the upgrade. Each group is a style chain that opts out, with the
+        device configurations that select it (None for the default)."""
+        chain_clues = [
+            c for _, r in groups for c in [*(s.clue for s in r.styles), r.clue] if c
+        ]
+        chains = [
+            (names, " → ".join(f"{s.qualifier}/{s.name}" for s in r.styles), r)
+            for names, r in groups
+        ]
+        names, used, result = chains[0]
+        if names is None:
+            own = result.styles[0]
+            if result.source is not None and result.source != theme_name:
+                where = (
+                    f"{self.device} 기기가 고르는 `{own.qualifier}/{theme_name}` 스타일이 부모인 "
+                    f"`{result.source}` 스타일에서 opt-out 항목을 상속받아 "
+                )
+            else:
+                where = f"{self.device} 기기가 고르는 `{own.qualifier}/{theme_name}` 스타일에 opt-out 항목이 있어 "
+            now = f"{where}지금은 Android 16 기기에서도 시스템 바 바깥에 그려집니다."
+            test_where = f"{self.device} 에뮬레이터에서"
         else:
-            where = f"{self.device} 기기가 고르는 `{own.qualifier}/{theme_name}` 스타일에 opt-out 항목이 있어"
-        scope = "이 설정의 " if configs else ""
-        device = f"{names} 설정의 {self.device}" if configs else self.device
+            listed = ", ".join(
+                "·".join(f"`{n}`" for n in ns) + f"({u})" for ns, u, _ in chains
+            )
+            now = (
+                f"{self.device} 기기의 기본 설정에는 opt-out 항목이 없지만, 다음 설정에서 고르는 스타일 체인에는 "
+                f"opt-out 항목이 있습니다: {listed}. 지금은 이 설정의 Android 16 기기에서도 시스템 바 바깥에 그려집니다."
+            )
+            test_where = (
+                f"{self.device} 에뮬레이터를 해당 설정(다크 모드 등)으로 바꾸고"
+            )
         self.add(
             "opt_out",
             OPT_OUT_TITLE,
             AFFECTED,
-            f"{where} 지금은 {scope}Android 16 기기에서도 시스템 바 바깥에 그려집니다. "
-            f"targetSdk가 {josa(self.api, '이/가')} 되면 Android 16 기기에서는 "
-            f"opt-out이 무시되어 앱이 edge-to-edge로 그려집니다. {ONLY_ANDROID16}",
-            clues + [s.clue for s in result.styles] + [result.clue],
+            f"{now} targetSdk가 {josa(self.api, '이/가')} 되면 Android 16 기기에서는 "
+            "opt-out이 무시되어 앱이 edge-to-edge로 그려집니다.",
+            clues + chain_clues,
             [A16["opt_out_ignored"]],
             [
-                f"{self.device} 에뮬레이터{'를 해당 설정(다크 모드 등)으로 바꾸고' if configs else '에서'} "
-                "Flutter 3.32 빌드와 Flutter 3.35 빌드를 열어, 앱 화면이 상태바·내비게이션 바 뒤까지 그려지는지 비교한다."
+                f"{test_where} Flutter 3.32 빌드와 Flutter 3.35 빌드를 열어, "
+                "앱 화면이 상태바·내비게이션 바 뒤까지 그려지는지 비교한다."
             ],
         )
         caveat, unchecked_clues = self.unchecked_caveat()
+        listed = ", ".join(f"{u}(`{r.source}`)" for _, u, r in chains)
         self.add(
             "opt_out_android16",
             f"{android_name(self.api)} 기기의 opt-out 항목",
             NEEDS_CHECK,
-            f"{device} 기기가 고르는 스타일 체인({used})에 opt-out 항목이 남아 있습니다(`{result.source}`). "
+            f"{self.device} 기기가 고르는 스타일 체인에 opt-out 항목이 남아 있습니다: {listed}. "
             "이후 문서는 Android 16 이상에서 이 방법으로 opt-out하면 앱이 크래시할 수 있고, "
             "버전별 리소스로 이를 피할 수 있다고 안내합니다. Android 16 기기에서만 이 항목을 빼려면 "
             "`values-v36`처럼 API 36 이상에 적용되는 디렉터리를 씁니다." + caveat,
-            [s.clue for s in result.styles] + [result.clue] + unchecked_clues,
+            chain_clues + unchecked_clues,
             [A16["opt_out_crash"]],
             [
                 f"{self.device} 에뮬레이터에서 앱을 실행해 첫 화면까지 크래시 없이 열리는지 확인한다."
@@ -1003,24 +1048,6 @@ class Android16Auditor(Auditor):
                     "`values-v35`는 API 35 이상 기기에, `values-v36`은 API 36 이상 기기에 적용됩니다."
                 )
         return caveat, [s.clue for s in styles if s.qualifier in unchecked][:5]
-
-    def unchecked_dirs(self) -> None:
-        """A directory this resolver does not judge can carry the opt-out an Android 16 device
-        selects, so "not affected" is not final while one is present."""
-        caveat, clues = self.unchecked_caveat()
-        if not caveat:
-            return
-        self.add(
-            "opt_out_variant",
-            "정확히 판단하지 않는 리소스 한정자",
-            NEEDS_CHECK,
-            "위 판단은 Android 16 기기의 기본 설정 기준입니다." + caveat,
-            clues,
-            tests=[
-                f"해당 한정자에 맞는 {self.device} 기기나 에뮬레이터 설정에서 첫 화면 상단을 확인한다."
-            ],
-            check="이 디렉터리들의 스타일에 opt-out 항목이 있는지 직접 확인하세요.",
-        )
 
     def mode_finding(self, title: str, mode: str, clues: list[Clue]) -> None:
         self.add(

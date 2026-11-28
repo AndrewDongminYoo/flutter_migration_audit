@@ -1,5 +1,6 @@
 """Korean particles chosen from the final sound of the word before them."""
 
+import ast
 import re
 from pathlib import Path
 
@@ -66,6 +67,12 @@ def test_parenthetical_follows_the_word_before_it():
     assert josa("targetSdk 35", "과/와") == "targetSdk 35와"
 
 
+def test_nested_and_trailing_parenthetical_remarks():
+    assert josa("API 36(Android (16))", "으로/로") == "API 36(Android (16))으로"
+    assert particle("API 36(Android 16) ", "으로/로") == "으로"
+    assert particle('API 35(Android 15)"', "으로/로") == "로"
+
+
 def test_unknown_final_sound_gives_both_forms():
     assert josa("`NormalTheme`", "이/가") == "`NormalTheme`이(가)"
     assert josa("values-night", "을/를") == "values-night을(를)"
@@ -73,16 +80,43 @@ def test_unknown_final_sound_gives_both_forms():
     assert final_sound("") is not None
 
 
-# A particle whose form depends on the final sound, written directly after an
-# interpolated value ({x}, `{x}`, or {f(x)}) in report text.
-VARIABLE = re.compile(r"\}[`)]*(?:은|는|이었|였|이|가|을|를|과|와|으로|로)")
+# A particle whose form depends on the final sound, at the start of the text
+# that follows an interpolated value ({x}, `{x}`, or {f(x)}).
+VARIABLE = re.compile(r"^[`)]*(?:은|는|이었|였|이|가|을|를|과|와|으로|로)")
+
+
+def variable_particles(source: str) -> list[int]:
+    """Lines where an f-string puts a variable particle right after an
+    interpolated value. The AST joins adjacent literals (f"{x}" "를") and
+    multi-line strings into one node, so those are found too."""
+    lines = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.JoinedStr):
+            continue
+        for value, after in zip(node.values, node.values[1:], strict=False):
+            if (
+                isinstance(value, ast.FormattedValue)
+                and isinstance(after, ast.Constant)
+                and VARIABLE.match(str(after.value))
+            ):
+                lines.append(node.lineno)
+    return lines
+
+
+def test_scan_finds_joined_and_multiline_literals():
+    assert variable_particles('f"{x}를"')
+    assert variable_particles('f"`{x}`가"')
+    assert variable_particles('f"{f(x)})로"')
+    assert variable_particles('f"{x}" "를"')
+    assert variable_particles('m = (\n    f"{x}"\n    "을"\n)')
+    assert not variable_particles("f\"{josa(x, '을/를')} 확인\"")
+    assert not variable_particles('f"`{x}` 스타일을"')
 
 
 def test_report_text_uses_josa_after_interpolated_values():
     offenders = [
-        f"{path.name}:{i}: {line.strip()}"
+        f"{path.name}:{line}"
         for path in sorted(SRC.glob("*.py"))
-        for i, line in enumerate(path.read_text().splitlines(), 1)
-        if VARIABLE.search(line)
+        for line in variable_particles(path.read_text())
     ]
     assert not offenders, "use fma.korean.josa():\n" + "\n".join(offenders)

@@ -43,7 +43,6 @@ UNIT_FINAL = {1: "N", 2: "N", 3: "N", 4: "N"}
 
 HANGUL_FIRST, HANGUL_LAST = 0xAC00, 0xD7A3
 FINAL_L = 8  # index of ㄹ among the final consonants
-PARENTHETICAL = re.compile(r"\s*\([^()]*\)$")
 TRAILING_MARKS = "`'\"”’ ."
 
 
@@ -68,15 +67,33 @@ def number_final(digits: str) -> str | None:
     return DIGIT_FINAL[stripped[-1]]
 
 
+def without_trailing_parenthetical(text: str) -> str:
+    """Drop trailing marks and balanced trailing parenthetical remarks. A
+    parenthetical explains the word before it, so the particle follows that
+    word: API 36(Android (16)) takes 으로, as 36 does."""
+    while True:
+        text = text.rstrip(TRAILING_MARKS)
+        if not text.endswith(")"):
+            return text
+        depth = 0
+        for i in range(len(text) - 1, -1, -1):
+            if text[i] == ")":
+                depth += 1
+            elif text[i] == "(":
+                depth -= 1
+                if depth == 0:
+                    break
+        else:
+            return text  # unbalanced
+        if i == 0:
+            return text  # the whole text is in parentheses
+        text = text[:i]
+
+
 def final_sound(word: str | int) -> str | None | Unknown:
     """Final sound of `word` as read aloud: "N" (consonant other than ㄹ),
     "L" (ㄹ), None (vowel), or UNKNOWN."""
-    text = str(word)
-    # A parenthetical explains the word before it; the particle follows
-    # that word (API 36(Android 16) → 으로, as for 36).
-    while PARENTHETICAL.search(text) and not text.startswith("("):
-        text = PARENTHETICAL.sub("", text)
-    text = text.rstrip(TRAILING_MARKS)
+    text = without_trailing_parenthetical(str(word))
     if not text:
         return UNKNOWN
     if m := re.search(r"(\d+)$", text):
