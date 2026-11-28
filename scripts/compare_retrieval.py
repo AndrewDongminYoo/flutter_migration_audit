@@ -29,6 +29,7 @@ from fma.evalset import (
     is_gold,
     is_wrong_version,
     load_questions,
+    passes_label_filter,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -52,6 +53,17 @@ def same_text_as_gold_revision(chunks: list[Chunk], chunk: Chunk, q) -> bool:
         None,
     )
     return twin is not None and twin.normalized == chunk.normalized
+
+
+def label_filtered(search, chunks):
+    """Rank every chunk, keep those that pass the version-label filter, and
+    cut to TOP_K, so the filter sees the same candidates as the others."""
+
+    def run(query):
+        ranked = search(query, top_k=len(chunks))
+        return [(s, c) for s, c in ranked if passes_label_filter(c)][:TOP_K]
+
+    return run
 
 
 def evaluate(questions, chunks, methods):
@@ -170,6 +182,8 @@ def main() -> None:
         "embedding": lambda q: dense.search(q, top_k=TOP_K),
         "bm25+version": lambda q: bm25.search(q, snapshots=target, top_k=TOP_K),
         "embedding+version": lambda q: dense.search(q, snapshots=target, top_k=TOP_K),
+        "bm25+label": label_filtered(bm25.search, chunks),
+        "embedding+label": label_filtered(dense.search, chunks),
     }
     rows = evaluate(questions, chunks, methods)
     summary = summarize(rows, list(methods))
