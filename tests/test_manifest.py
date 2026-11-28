@@ -179,3 +179,71 @@ def test_launch_theme_opt_out_on_android16_is_reported(index):
     report = audit("3.32.5", "3.35.1", inputs, index)
     assert finding(report, "opt_out").verdict == NOT_AFFECTED
     assert finding(report, "launch_theme").verdict == NEEDS_CHECK
+
+
+def test_cdata_is_not_read_as_tags():
+    inputs = read(
+        '<activity android:name=".MainActivity" android:theme="@style/LaunchTheme">\n'
+        f'<![CDATA[ <meta-data android:name="{META}" android:resource="@style/Fake"/> ]]>\n'
+        "</activity>"
+    )
+    assert inputs.normal_theme is None
+    assert inputs.launch_theme[0] == "LaunchTheme"
+
+
+def test_launcher_alias_points_to_its_activity():
+    inputs = read(
+        '<activity android:name=".Settings" android:theme="@style/Other"/>\n'
+        '<activity android:name=".MainActivity" android:theme="@style/LaunchTheme"/>\n'
+        '<activity-alias android:name=".Launcher" android:targetActivity=".MainActivity">\n'
+        "  <intent-filter>\n"
+        '    <category android:name="android.intent.category.LAUNCHER"/>\n'
+        "  </intent-filter>\n"
+        "</activity-alias>"
+    )
+    assert inputs.launch_theme[0] == "LaunchTheme"
+
+
+NIGHT_META = f'<meta-data android:name="{META}" android:resource="@style/NormalTheme"/>'
+
+
+def test_launch_theme_mismatch_only_at_night(index):
+    inputs = app(
+        ACTIVITY.format(NIGHT_META), styles(LaunchTheme=True, NormalTheme=True)
+    )
+    read_styles(
+        styles(LaunchTheme=True, NormalTheme=False),
+        "values-night/styles.xml",
+        "values-night",
+        inputs,
+    )
+    f = finding(audit("3.24.5", "3.27.1", inputs, index), "launch_theme")
+    assert f is not None and f.verdict == NEEDS_CHECK and "`values-night`" in f.reason
+
+
+def test_launch_theme_is_conditional_on_an_unknown_target(index):
+    inputs = app(
+        ACTIVITY.format(NIGHT_META), styles(LaunchTheme=False, NormalTheme=True)
+    )
+    inputs.target_sdk = None
+    f = finding(audit("3.24.5", "3.27.1", inputs, index), "launch_theme")
+    assert f.reason.startswith("targetSdk가 35가 된다면: ")
+
+
+def test_android16_launch_theme_without_opt_out_adds_nothing(index):
+    """At targetSdk 36 Android 16 ignores both opt-outs: the normal theme's
+    loss is the opt_out finding, and the launch screen does not change."""
+    inputs = app(
+        ACTIVITY.format(NIGHT_META), styles(LaunchTheme=False, NormalTheme=True)
+    )
+    assert finding(audit("3.32.5", "3.35.1", inputs, index), "launch_theme") is None
+
+
+def test_android16_launch_theme_loses_its_opt_out(index):
+    inputs = app(
+        ACTIVITY.format(NIGHT_META), styles(LaunchTheme=True, NormalTheme=False)
+    )
+    f = finding(audit("3.32.5", "3.35.1", inputs, index), "launch_theme")
+    assert f.verdict == NEEDS_CHECK
+    assert "실행 화면" in f.reason and "맞추세요" not in (f.check or "")
+    assert any("cannot opt-out" in e.quote for e in f.evidence)

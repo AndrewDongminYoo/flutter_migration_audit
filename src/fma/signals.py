@@ -460,10 +460,18 @@ def read_gradle(text: str, name: str, inputs: AppInputs) -> None:
 
 NORMAL_THEME_META = "io.flutter.embedding.android.NormalTheme"
 MANIFEST_TAG = re.compile(
-    r"<(application|activity|meta-data)\b([^>]*?)(/?)>", re.DOTALL
+    r"<(application|activity-alias|activity|meta-data)\b([^>]*?)(/?)>", re.DOTALL
 )
-ACTIVITY_END = re.compile(r"</activity\s*>")
+ACTIVITY_END = {
+    "activity": re.compile(r"</activity\s*>"),
+    "activity-alias": re.compile(r"</activity-alias\s*>"),
+}
+CDATA = re.compile(r"<!\[CDATA\[.*?\]\]>", re.DOTALL)
 APP_STYLE = re.compile(r"@style/([\w.]+)$")
+
+
+def _attrs(tag: re.Match) -> dict[str, str]:
+    return {m.group(1): m.group(2) or m.group(3) for m in ATTR.finditer(tag.group(2))}
 
 
 def _style_attr(
@@ -481,16 +489,22 @@ def _style_attr(
     return None
 
 
+def _short(activity: str) -> str:
+    return activity.rsplit(".", 1)[-1]
+
+
 def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
     """Read the FlutterActivity's themes. The NormalTheme meta-data names the
     theme Flutter switches to after the launch screen; the activity's
     android:theme (or the application's) is the launch theme. The activity is
-    the one with the meta-data, else the launcher, else the only one."""
+    the one with the meta-data, else the launcher (directly or through an
+    activity-alias), else the only one."""
     inputs.manifest_provided = True
-    body = XML_COMMENT.sub(_blank, text)
+    body = CDATA.sub(_blank, XML_COMMENT.sub(_blank, text))
     app_theme = None
     loose = None  # NormalTheme meta-data outside any activity (a snippet)
-    activities = []  # (launch theme, normal theme, launcher)
+    activities: list[dict] = []
+    alias_targets: list[str] = []  # targetActivity of launcher aliases
     current = None
     end = -1
     for tag in MANIFEST_TAG.finditer(body):
@@ -499,26 +513,33 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
             current = None
         if kind == "application":
             app_theme = _style_attr(text, name, tag, "android:theme")
-        elif kind == "activity":
-            close = ACTIVITY_END.search(body, tag.end())
+        elif kind in ACTIVITY_END:
+            close = ACTIVITY_END[kind].search(body, tag.end())
             end = tag.end() if tag.group(3) or not close else close.end()
+            attrs = _attrs(tag)
+            launcher = "android.intent.category.LAUNCHER" in body[tag.end() : end]
+            if kind == "activity-alias":
+                current = None  # its meta-data does not theme the activity
+                if launcher and attrs.get("android:targetActivity"):
+                    alias_targets.append(attrs["android:targetActivity"])
+                continue
             current = {
+                "name": attrs.get("android:name", ""),
                 "launch": _style_attr(text, name, tag, "android:theme"),
                 "normal": None,
-                "launcher": "android.intent.category.LAUNCHER" in body[tag.end() : end],
+                "launcher": launcher,
             }
             activities.append(current)
-        else:
-            attrs = {
-                m.group(1): m.group(2) or m.group(3)
-                for m in ATTR.finditer(tag.group(2))
-            }
-            if attrs.get("android:name") == NORMAL_THEME_META:
-                theme = _style_attr(text, name, tag, "android:resource")
-                if current is not None:
-                    current["normal"] = theme
-                else:
-                    loose = theme
+        elif _attrs(tag).get("android:name") == NORMAL_THEME_META:
+            theme = _style_attr(text, name, tag, "android:resource")
+            if current is not None:
+                current["normal"] = theme
+            else:
+                loose = theme
+    for target in alias_targets:
+        for a in activities:
+            if _short(a["name"]) == _short(target):
+                a["launcher"] = True
     chosen = (
         next((a for a in activities if a["normal"]), None)
         or next((a for a in activities if a["launcher"]), None)
