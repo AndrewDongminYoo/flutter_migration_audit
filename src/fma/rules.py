@@ -446,6 +446,13 @@ class Auditor:
                 ),
             )
             return None
+        for other, clue in inp.other_themes:
+            note = (
+                f"`{clue.file}`의 {clue.line}행은 `{other}` 테마를 지정하지만, "
+                "먼저 읽은 기본 manifest의 테마로 판단했습니다. 이 manifest를 쓰는 빌드에서는 결과가 다를 수 있습니다."
+            )
+            if note not in self.notes:
+                self.notes.append(note)
         if not inp.normal_theme and inp.launch_theme:
             note = (
                 f"AndroidManifest.xml에 NormalTheme meta-data가 없어, FlutterActivity가 계속 쓰는 "

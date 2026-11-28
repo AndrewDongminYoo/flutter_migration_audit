@@ -428,6 +428,8 @@ class AppInputs:
     normal_theme: tuple[str, Clue] | None = None
     launch_theme: tuple[str, Clue] | None = None
     framework_theme: tuple[str, Clue] | None = None  # such as @android:style/...
+    # Themes a later manifest (such as src/debug) names but the audit does not judge.
+    other_themes: list[tuple[str, Clue]] = field(default_factory=list)
     styles: list[Style] = field(default_factory=list)
     ui_modes: list[tuple[str, Clue]] = field(default_factory=list)
     safe_areas: list[Clue] = field(default_factory=list)
@@ -463,6 +465,7 @@ NORMAL_THEME_META = "io.flutter.embedding.android.NormalTheme"
 MANIFEST_TAG = re.compile(
     r"<(application|activity-alias|activity|meta-data)\b([^>]*?)(/?)>", re.DOTALL
 )
+ACTIVITY_START = re.compile(r"<activity(?:-alias)?\b")
 ACTIVITY_END = {
     "activity": re.compile(r"</activity\s*>"),
     "activity-alias": re.compile(r"</activity-alias\s*>"),
@@ -533,11 +536,13 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
         if kind == "application":
             app_theme = _theme_attr(text, name, tag, "android:theme")
         elif kind in ACTIVITY_END:
-            close = ACTIVITY_END[kind].search(body, tag.end())
             if tag.group(3):
                 end = tag.end()
-            else:  # a snippet may omit the closing tag
-                end = close.end() if close else len(body)
+            else:  # a snippet may omit the closing tag: stop at the next activity
+                sibling = ACTIVITY_START.search(body, tag.end())
+                limit = sibling.start() if sibling else len(body)
+                close = ACTIVITY_END[kind].search(body, tag.end(), limit)
+                end = close.end() if close else limit
             attrs = _attrs(tag)
             launcher = "android.intent.category.LAUNCHER" in body[tag.end() : end]
             if kind == "activity-alias":
@@ -574,12 +579,22 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
         normal, launch = loose, app_theme
     else:
         normal, launch = None, None
+    # The first manifest read (src/main, which read_paths puts first) sets
+    # the themes as the base source set. A later one that names other
+    # themes is only recorded.
     if normal:
-        inputs.normal_theme = normal
+        if inputs.normal_theme is None:
+            inputs.normal_theme = normal
+        elif normal[0] != inputs.normal_theme[0]:
+            inputs.other_themes.append(normal)
     if launch:
         style, clue, is_app = launch
-        inputs.launch_theme = (style, clue) if is_app else None
-        inputs.framework_theme = None if is_app else (style, clue)
+        known = inputs.launch_theme or inputs.framework_theme
+        if known is None:
+            inputs.launch_theme = (style, clue) if is_app else None
+            inputs.framework_theme = None if is_app else (style, clue)
+        elif style != known[0]:
+            inputs.other_themes.append((style, clue))
 
 
 # --- res/values*/styles.xml -----------------------------------------------
@@ -733,7 +748,14 @@ def read_dart(text: str, name: str, inputs: AppInputs) -> None:
 def read_paths(paths: list[Path], root: Path | None = None) -> AppInputs:
     """Read known file types. `root` only shortens names in the report."""
     inputs = AppInputs()
-    for path in sorted(paths):
+
+    def order(path: Path):
+        # src/main's manifest first: build-type manifests (src/debug, src/profile)
+        # only add to the base source set; they do not decide the audited theme.
+        variant = path.name == "AndroidManifest.xml" and "main" not in path.parts
+        return (variant, path)
+
+    for path in sorted(paths, key=order):
         name = str(path.relative_to(root)) if root else str(path)
         text = path.read_text(encoding="utf-8")
         if path.name in ("build.gradle", "build.gradle.kts"):

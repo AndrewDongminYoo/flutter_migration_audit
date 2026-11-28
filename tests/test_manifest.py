@@ -390,3 +390,48 @@ def test_unclosed_activity_snippet_keeps_its_meta_data():
         f'<meta-data android:name="{META}" android:resource="@style/AppTheme"/>'
     )
     assert inputs.normal_theme[0] == "AppTheme"
+
+
+def test_main_manifest_theme_wins_over_a_build_type_manifest(tmp_path):
+    """Local review: src/debug sorts before src/main, src/profile after it.
+    The base source set (main) is judged either way."""
+    from fma.signals import read_paths
+
+    for variant in ("debug", "profile"):
+        d = tmp_path / variant
+        (d / "src/main").mkdir(parents=True)
+        (d / f"src/{variant}").mkdir(parents=True)
+        (d / "src/main/AndroidManifest.xml").write_text(
+            f'<activity android:name=".MainActivity">\n<meta-data android:name="{META}" android:resource="@style/MainTheme"/>\n</activity>'
+        )
+        (d / f"src/{variant}/AndroidManifest.xml").write_text(
+            f'<activity android:name=".MainActivity">\n<meta-data android:name="{META}" android:resource="@style/VariantTheme"/>\n</activity>'
+        )
+        inputs = read_paths(sorted(d.rglob("AndroidManifest.xml")), d)
+        assert inputs.normal_theme[0] == "MainTheme", variant
+        assert [t[0] for t in inputs.other_themes] == ["VariantTheme"], variant
+
+
+def test_other_manifest_theme_is_noted(index):
+    inputs = app(
+        ACTIVITY.format(NIGHT_META), styles(LaunchTheme=True, NormalTheme=True)
+    )
+    read_manifest(
+        f'<activity android:name=".MainActivity">\n<meta-data android:name="{META}" android:resource="@style/DebugTheme"/>\n</activity>',
+        "debug/AndroidManifest.xml",
+        inputs,
+    )
+    report = audit("3.24.5", "3.27.1", inputs, index)
+    assert any(
+        "`DebugTheme`" in n and "debug/AndroidManifest.xml" in n for n in report.notes
+    )
+
+
+def test_unclosed_activity_ends_at_the_next_activity():
+    inputs = read(
+        '<activity android:name=".Old" android:theme="@style/OldTheme">\n'
+        '<activity android:name=".MainActivity" android:theme="@style/MainTheme">\n'
+        '<intent-filter><category android:name="android.intent.category.LAUNCHER"/></intent-filter>\n'
+        "</activity>"
+    )
+    assert inputs.launch_theme[0] == "MainTheme"
