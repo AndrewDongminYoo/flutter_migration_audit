@@ -856,12 +856,13 @@ class Auditor:
 class Android16Auditor(Auditor):
     """Rules for an upgrade that moves the default targetSdk from 35 to 36.
 
-    Edge-to-edge already applied at 35, so an app without the opt-out does
-    not change. An app with the opt-out keeps it on Android 15 devices but
-    loses it on Android 16 devices, so the checks that assume edge-to-edge
-    run for it. The opt-out is read on an API 35 device (before the
-    upgrade); the style an API 36 device selects is checked for the item
-    the later docs warn about.
+    Only Android 16 devices behave differently: Android 15 and earlier
+    devices treat targetSdk 35 and 36 the same. So the opt-out is read on an
+    API 36 device. Before the upgrade it still applied there; after it,
+    Android 16 ignores it. An app whose API 36 style has no opt-out already
+    drew edge-to-edge on Android 16 and does not change. For an app that
+    loses the opt-out, the checks that assume edge-to-edge run, and the item
+    is reported because the later docs warn that it may crash the app.
     """
 
     already_state = "Android 16 기기에서 opt-out이 무시되던 상태입니다."
@@ -877,115 +878,113 @@ class Android16Auditor(Auditor):
     def opt_out(self) -> bool | None:
         """Return True if the upgrade leaves the app as it was (stop), False
         if Android 16 changes it, None if unknown."""
-        day = self.opt_out_state(EDGE_TO_EDGE_API)
+        day = self.opt_out_state(self.api)
         if day is None:
             return None
         theme_name, clues = self.theme()
         own = day.styles[0]
         inherited = day.source is not None and day.source != theme_name
-        before, after = android_name(EDGE_TO_EDGE_API), android_name(self.api)
+        used = " → ".join(f"{s.qualifier}/{s.name}" for s in day.styles)
+        older = android_name(EDGE_TO_EDGE_API)
+        unchanged_older = (
+            f"{older} 이하 기기는 targetSdk {EDGE_TO_EDGE_API}{particle(EDGE_TO_EDGE_API, '과', '와')} "
+            f"{self.api}에서 동작이 같습니다."
+        )
         if not day.value:
             cause = (
-                "opt-out 항목이 `false`로 설정되어 있어"
-                + (f"(`{day.source}`에서 상속)" if inherited else "")
+                f"{self.device} 기기가 고르는 스타일({used})에서 opt-out 항목이 `false`로 설정되어 있어"
                 if day.value is False
-                else f"`{theme_name}`과 그 부모 스타일에 opt-out 항목이 없어"
+                else f"{self.device} 기기가 고르는 스타일({used})에 opt-out 항목이 없어"
             )
             self.add(
                 "opt_out",
                 OPT_OUT_TITLE,
                 NOT_AFFECTED,
-                f"{cause} 업그레이드 전(targetSdk {EDGE_TO_EDGE_API})부터 앱이 edge-to-edge로 그려지고 있었습니다. "
-                "이번 업그레이드로 바뀌는 것은 없습니다.",
+                f"{cause} 업그레이드 전(targetSdk {EDGE_TO_EDGE_API})부터 Android 16 기기에서도 "
+                f"앱이 edge-to-edge로 그려지고 있었습니다. {unchanged_older}",
                 clues + [own.clue] + ([day.clue] if day.value is False else []),
                 [E["edge_default"]],
             )
             self.notes.append(
                 "업그레이드 전부터 edge-to-edge였으므로 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
             )
+            self.unchecked_dirs()
             return True
         where = (
-            f"`{theme_name}`이 부모 스타일 `{day.source}`에서 opt-out 항목을 상속받아"
+            f"{self.device} 기기가 고르는 `{own.qualifier}/{theme_name}`이 부모 스타일 `{day.source}`에서 "
+            "opt-out 항목을 상속받아"
             if inherited
-            else f"`{theme_name}`에 opt-out 항목이 있어"
+            else f"{self.device} 기기가 고르는 `{own.qualifier}/{theme_name}`에 opt-out 항목이 있어"
         )
         self.add(
             "opt_out",
             OPT_OUT_TITLE,
             AFFECTED,
-            f"{where} {before} 기기에서는 지금처럼 시스템 바 바깥에 그려집니다. "
-            f"하지만 targetSdk가 {self.api}{particle(self.api, '이', '가')} 되면 {after} 기기에서는 "
-            "opt-out이 무시되어 앱이 edge-to-edge로 그려집니다.",
+            f"{where} 지금은 Android 16 기기에서도 시스템 바 바깥에 그려집니다. "
+            f"targetSdk가 {self.api}{particle(self.api, '이', '가')} 되면 Android 16 기기에서는 "
+            f"opt-out이 무시되어 앱이 edge-to-edge로 그려집니다. {unchanged_older}",
             clues + ([own.clue] if inherited else []) + [day.clue],
             [A16["opt_out_ignored"]],
             [
-                f"{self.device} 에뮬레이터에서 앱 화면이 상태바·내비게이션 바 뒤까지 그려지는지 확인하고, "
-                f"{before}(API {EDGE_TO_EDGE_API}) 에뮬레이터와 비교한다."
+                f"{self.device} 에뮬레이터에서 Flutter 3.32 빌드와 Flutter 3.35 빌드를 열고, "
+                "앱 화면이 상태바·내비게이션 바 뒤까지 그려지는지 비교한다."
             ],
         )
-        self.android16_style(theme_name)
+        caveat, unchecked_clues = self.unchecked_caveat()
+        self.add(
+            "opt_out_android16",
+            f"{android_name(self.api)} 기기의 opt-out 항목",
+            NEEDS_CHECK,
+            f"{self.device} 기기가 고르는 스타일 체인({used})에 opt-out 항목이 남아 있습니다(`{day.source}`). "
+            "이후 문서는 Android 16 이상에서 이 항목을 쓰면 앱이 크래시할 수 있다며, "
+            "버전별 리소스로 이 항목을 빼라고 안내합니다." + caveat,
+            [s.clue for s in day.styles] + [day.clue] + unchecked_clues,
+            [A16["opt_out_crash"]],
+            [
+                f"{self.device} 에뮬레이터에서 앱을 실행해 첫 화면까지 크래시 없이 열리는지 확인한다."
+            ],
+            check="API 36 이상 기기에서 쓰이는 버전별 스타일에서 opt-out 항목을 빼는지 검토하세요.",
+        )
         return False
 
-    def android16_style(self, theme_name: str) -> None:
-        """The later docs warn that the opt-out item may crash an app on
-        Android 16 and suggest version-specific resources. Report whether the
-        style an API 36 device selects still carries the item."""
-        styles = resolve_opt_out(self.inputs.styles, theme_name, "values", self.api)
-        if styles is None:
-            return
-        used = " → ".join(f"{s.qualifier}/{s.name}" for s in styles.styles)
-        title = f"{android_name(self.api)} 기기의 opt-out 항목"
-        unchecked = sorted(
-            unchecked_qualifiers({s.qualifier for s in self.inputs.styles})
+    def unchecked_caveat(self) -> tuple[str, list[Clue]]:
+        """A sentence naming the style directories this resolver does not
+        judge, and their clues. Directories such as `values-35` (the name the
+        later docs use) get the platform version qualifier format."""
+        styles = self.inputs.styles
+        unchecked = sorted(unchecked_qualifiers({s.qualifier for s in styles}))
+        if not unchecked:
+            return "", []
+        caveat = (
+            " 이 판단은 "
+            + ", ".join(f"`{q}`" for q in unchecked)
+            + " 디렉터리를 고려하지 않았습니다."
         )
-        caveat = ""
-        if unchecked:
-            caveat = (
-                " 이 판단은 "
-                + ", ".join(f"`{q}`" for q in unchecked)
-                + " 디렉터리를 고려하지 않았습니다."
-            )
-            for q in unchecked:
-                if m := re.fullmatch(r"values-(\d+)", q):
-                    caveat += (
-                        f" 플랫폼 버전 한정자는 `values-v{m[1]}`처럼 `v`를 붙여 씁니다. "
-                        f"`{q}`는 버전별 리소스로 인식되지 않습니다."
-                    )
-        unchecked_clues = [
-            s.clue for s in self.inputs.styles if s.qualifier in unchecked
-        ][:5]
-        if styles.source is not None or unchecked:
-            self.add(
-                "opt_out_android16",
-                title,
-                NEEDS_CHECK,
-                (
-                    f"{self.device} 기기에서 Android가 고르는 스타일 체인({used})에 opt-out 항목이 남아 있습니다"
-                    f"(`{styles.source}`)."
-                    if styles.source is not None
-                    else f"{self.device} 기기에서 Android가 고르는 스타일 체인({used})에는 opt-out 항목이 없습니다."
+        for q in unchecked:
+            if m := re.fullmatch(r"values-(\d+)", q):
+                caveat += (
+                    f" 플랫폼 버전 한정자는 `values-v{m[1]}`처럼 `v`를 붙여 씁니다. "
+                    f"`{q}`는 버전별 리소스로 인식되지 않습니다."
                 )
-                + " 이후 문서는 Android 16 이상에서 이 항목을 쓰면 앱이 크래시할 수 있다며, "
-                "버전별 리소스로 이 항목을 빼라고 안내합니다." + caveat,
-                [s.clue for s in styles.styles]
-                + ([styles.clue] if styles.clue else [])
-                + unchecked_clues,
-                [A16["opt_out_crash"]],
-                [
-                    f"{self.device} 에뮬레이터에서 앱을 실행해 첫 화면까지 크래시 없이 열리는지 확인한다."
-                ],
-                check="API 36 이상 기기에서 쓰이는 버전별 스타일에서 opt-out 항목을 빼는지 검토하세요.",
-            )
-        else:
-            self.add(
-                "opt_out_android16",
-                title,
-                NOT_AFFECTED,
-                f"{self.device} 기기에서 Android가 고르는 스타일 체인({used})에는 opt-out 항목이 없습니다. "
-                "이후 문서가 크래시를 피하려고 안내하는 구성과 같습니다.",
-                [s.clue for s in styles.styles],
-                [A16["opt_out_crash"]],
-            )
+        return caveat, [s.clue for s in styles if s.qualifier in unchecked][:5]
+
+    def unchecked_dirs(self) -> None:
+        """A directory this resolver does not judge can carry the opt-out an Android 16 device
+        selects, so "not affected" is not final while one is present."""
+        caveat, clues = self.unchecked_caveat()
+        if not caveat:
+            return
+        self.add(
+            "opt_out_variant",
+            "정확히 판단하지 않는 리소스 한정자",
+            NEEDS_CHECK,
+            "위 판단은 Android 16 기기의 기본 설정 기준입니다." + caveat,
+            clues,
+            tests=[
+                f"해당 한정자에 맞는 {self.device} 기기나 에뮬레이터 설정에서 첫 화면 상단을 확인한다."
+            ],
+            check="이 디렉터리들의 스타일에 opt-out 항목이 있는지 직접 확인하세요.",
+        )
 
     def mode_finding(self, title: str, mode: str, clues: list[Clue]) -> None:
         self.add(

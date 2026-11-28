@@ -104,18 +104,46 @@ def test_explicit_target_36_was_already_android16(index):
     assert f.verdict == NOT_AFFECTED and "이미 targetSdk 36을" in f.reason
 
 
-def test_version_resources_without_the_item_avoid_the_android16_case(index):
-    """values-v36 without the opt-out item: Android 15 devices keep the opt-out
-    from values, and Android 16 devices pick a style without the item."""
+def test_version_resources_without_the_item_were_already_edge_to_edge(index):
+    """values-v36 without the opt-out item (the later docs' crash workaround):
+    Android 16 devices drew edge-to-edge before the upgrade, and Android 15
+    devices behave the same with targetSdk 35 and 36."""
     report = audit(
         "3.32.5",
         "3.35.1",
         inputs(("values", xml("true")), ("values-v36", xml(None))),
         index,
     )
-    assert finding(report, "opt_out").verdict == AFFECTED
-    f = finding(report, "opt_out_android16")
+    f = finding(report, "opt_out")
     assert f.verdict == NOT_AFFECTED and "values-v36" in f.reason
+    assert [x.key for x in report.findings] == ["target_sdk", "opt_out"]
+
+
+def test_opt_out_only_in_values_v36_is_lost(index):
+    """Codex review on #32: the opt-out that only Android 16 devices select
+    still applied at targetSdk 35 and is ignored at 36."""
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", xml(None)), ("values-v36", xml("true"))),
+        index,
+    )
+    assert finding(report, "opt_out").verdict == AFFECTED
+    assert finding(report, "opt_out_android16").verdict == NEEDS_CHECK
+
+
+def test_missing_parent_on_android16_stays_open(index):
+    """Codex review on #32: a values-v36 theme whose local parent is not in
+    the input may inherit the item, so it is not reported as absent."""
+    v36 = '<resources><style name="NormalTheme" parent="Base.Theme"/></resources>'
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", xml("true")), ("values-v36", v36)),
+        index,
+    )
+    assert finding(report, "opt_out").verdict == NEEDS_CHECK
+    assert all(f.key != "opt_out_android16" for f in report.findings)
 
 
 def test_overlay_colors_stop_working_on_android16(index):
@@ -171,5 +199,6 @@ def test_unchecked_directories_keep_the_android16_check_open(index):
         ),
         index,
     )
-    f = finding(report, "opt_out_android16")
+    assert finding(report, "opt_out").verdict == NOT_AFFECTED
+    f = finding(report, "opt_out_variant")
     assert f.verdict == NEEDS_CHECK and "`values-xhdpi`" in f.reason
