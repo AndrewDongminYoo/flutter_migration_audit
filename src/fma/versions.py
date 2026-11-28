@@ -20,9 +20,12 @@ class UnsupportedVersion(ValueError):
 class Release:
     minor: tuple[int, int]
     snapshot_id: str
-    # Value of `flutter.targetSdkVersion` in this release. Source: the
+    # Value of `flutter.targetSdkVersion` in this release. Sources: the
     # "Context" section of the 3.27 edge-to-edge breaking change doc
-    # ("Prior to Flutter 3.27, Flutter apps target Android 14 by default").
+    # ("Prior to Flutter 3.27, Flutter apps target Android 14 by default"),
+    # and `targetSdkVersion` in flutter_tools at each release tag
+    # (flutter.groovy up to 3.29, FlutterExtension.kt from 3.32: 35 in
+    # 3.32.0, 36 in 3.35.0).
     default_target_sdk: int
 
     @property
@@ -33,11 +36,13 @@ class Release:
 RELEASES = {
     (3, 24): Release((3, 24), "flutter-3.24", 34),
     (3, 27): Release((3, 27), "flutter-3.27", 35),
+    (3, 32): Release((3, 32), "flutter-3.32", 35),
+    (3, 35): Release((3, 35), "flutter-3.35", 36),
 }
 # Upgrades the audit supports, as (current minor, target minor). Each range
 # changes the default targetSdk; its evidence comes from the docs snapshot of
 # the target release.
-SUPPORTED_RANGES = (((3, 24), (3, 27)),)
+SUPPORTED_RANGES = (((3, 24), (3, 27)), ((3, 32), (3, 35)))
 
 
 def android_name(api: int) -> str:
@@ -76,7 +81,7 @@ def check_range(current: str, target: str) -> tuple[Release, Release]:
     cur, tgt = release_for(current), release_for(target)
     if (cur.minor, tgt.minor) not in SUPPORTED_RANGES:
         raise UnsupportedVersion(
-            "첫 버전은 Flutter "
+            "Flutter "
             + ", ".join(range_text(r) for r in SUPPORTED_RANGES)
             + f" 구간만 분석합니다. 입력: {current} → {target}"
         )

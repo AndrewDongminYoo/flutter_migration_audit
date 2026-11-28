@@ -88,16 +88,23 @@ def accept(chunk: Chunk, spec: Spec, target: Release) -> bool:
 
 MD_REF_LINK = re.compile(r"\[([^\]]+)\]\[[^\]]*\]")
 MD_INLINE_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+# A bullet list item marker at the start of a line. Numbered lists stay
+# whole: their items read as one argument (the 3.27 opt-out note is
+# "1. ... temporary. 2. ... migrate before the OS removes the opt-out").
+LIST_ITEM = re.compile(r"^\s*[*-]\s+", re.M)
 
 
 def quote_for(chunk: Chunk, must_contain: str) -> str:
     """Return the paragraph that contains the required sentence, with
-    Markdown link syntax reduced to its label."""
+    Markdown link syntax reduced to its label. In a list (release notes are
+    one long list), return only the item that contains it."""
     needle = normalize(must_contain).lower()
     for para in re.split(r"\n\s*\n", chunk.text):
-        flat = normalize(para)
-        if needle in flat.lower():
-            return MD_INLINE_LINK.sub(r"\1", MD_REF_LINK.sub(r"\1", flat))
+        parts = LIST_ITEM.split(para) if LIST_ITEM.match(para) else [para]
+        for part in parts:
+            flat = normalize(part)
+            if needle in flat.lower():
+                return MD_INLINE_LINK.sub(r"\1", MD_REF_LINK.sub(r"\1", flat))
     return normalize(must_contain)
 
 

@@ -20,6 +20,7 @@ from pathlib import Path
 import numpy as np
 
 from .corpus import ROOT, Chunk
+from .korean import josa
 
 MODEL = "BAAI/bge-small-en-v1.5"
 CACHE = ROOT / "data" / "index"
@@ -99,7 +100,7 @@ class Dense:
         label = snapshots[0] if len(snapshots) == 1 else "전체"
         threads = embed_threads()
         print(
-            f"문서 {len(texts)}개 섹션({label})을 임베딩합니다. 처음 한 번만 하며 몇 분 걸립니다"
+            f"문서 {josa(f'{len(texts)}개 섹션({label})', '을/를')} 임베딩합니다. 처음 한 번만 하며 몇 분 걸립니다"
             + (f" (스레드 {threads}개)." if threads else "."),
             file=sys.stderr,
         )

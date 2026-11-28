@@ -10,6 +10,7 @@ evalset
 fastembed
 hdpi
 highdr
+josa
 keepdims
 keysexposed
 keyshidden

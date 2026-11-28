@@ -138,7 +138,7 @@ def test_inherited_opt_out_is_not_affected_and_cites_parent_rule(index):
     )
     f = finding(report, "opt_out")
     assert f.verdict == NOT_AFFECTED
-    assert "부모 스타일 `Base`" in f.reason
+    assert "부모인 `Base` 스타일" in f.reason
     # manifest line, the NormalTheme declaration, then the item inside Base
     assert [c.line for c in f.clues] == [1, 5, 3]
     assert (

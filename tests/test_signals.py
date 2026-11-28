@@ -162,13 +162,11 @@ def test_every_supported_range_is_accepted(extra_range):
 
     assert check_range("3.27.1", "3.29.0")[1] == extra_range
     assert check_range("3.24.5", "3.27.1")[1].snapshot_id == "flutter-3.27"
-    assert [r.snapshot_id for r in target_releases()] == [
-        "flutter-3.27",
-        "flutter-3.29",
-    ]
+    assert [r.snapshot_id for r in target_releases()][-1] == "flutter-3.29"
     with pytest.raises(UnsupportedVersion) as e:
         check_range("3.24.0", "3.29.0")  # skipping a range is not supported
-    assert "3.24.x → 3.27.x, 3.27.x → 3.29.x" in str(e.value)
+    assert str(e.value).startswith("Flutter 3.24.x → 3.27.x, ")
+    assert "3.27.x → 3.29.x 구간만 분석합니다" in str(e.value)
 
 
 def test_cli_scope_covers_every_target_release(extra_range):
