@@ -138,8 +138,59 @@ DEVICE_API = 35
 
 
 # Qualifiers that name a minimum value: a directory applies when the device
-# value is at least this, and the largest such threshold wins.
-THRESHOLD_KINDS = {"version", "sw", "w", "h"}
+# value is at least this, and the largest such threshold wins. Screen size
+# behaves the same way: a device falls back to resources for smaller sizes.
+THRESHOLD_KINDS = {"version", "sw", "w", "h", "size"}
+SCREEN_SIZES = {"small": 1, "normal": 2, "large": 3, "xlarge": 4}
+SCREEN_SIZE_NAMES = {v: k for k, v in SCREEN_SIZES.items()}
+# The default configuration is an ordinary phone. Android treats a resource
+# without a size as `normal` on a device that is at least `normal`, so there
+# values beats values-small (ResTable_config::isBetterThan in AOSP's
+# ResourceTypes.cpp).
+NORMAL_SIZE = SCREEN_SIZES["normal"]
+
+
+def canonical_locale(value: str) -> str:
+    """Bring `b+en+US` and `en-rUS` to one form (`en-rUS`); a script is kept
+    as its own part (`b+zh+Hant+TW` becomes `zh-Hant-rTW`). A tag with other
+    subtags, such as a variant (`b+en+US+POSIX`), is returned unchanged: this
+    resolver does not compare them, and the tag must stay distinct."""
+    if not value.startswith("b+"):
+        return value
+    lang, script, region = "", None, None
+    for i, sub in enumerate(value[2:].split("+")):
+        if i == 0:
+            lang = sub.lower()
+        elif i == 1 and len(sub) == 4 and sub.isalpha():
+            script = sub.title()
+        elif region is None and (
+            (len(sub) == 2 and sub.isalpha()) or (len(sub) == 3 and sub.isdigit())
+        ):
+            region = sub.upper()
+        else:
+            return value
+    return "-".join(
+        [lang] + ([script] if script else []) + ([f"r{region}"] if region else [])
+    )
+
+
+def locale_parts(value: str) -> tuple[str, str | None, str | None]:
+    """Split a canonical locale into (language, script, region)."""
+    lang, *rest = value.split("-")
+    # Scripts are title case (`Hant`); regions carry a lowercase `r` (`r419`).
+    script = next((s for s in rest if len(s) == 4 and s[0].isupper()), None)
+    region = next((s[1:] for s in rest if s.startswith("r") and len(s) > 1), None)
+    return lang, script, region
+
+
+def locale_qualifier(value: str) -> str:
+    """Render a canonical locale as a directory qualifier. The legacy form
+    (`en-rUS`) has no script and only two-letter regions; anything else is
+    written in BCP-47 form (`b+es+419`)."""
+    lang, script, region = locale_parts(value)
+    if script is None and (region is None or region.isalpha()):
+        return value
+    return "+".join(["b", lang, *(x for x in (script, region) if x)])
 
 
 def qualifier_parts(qualifier: str) -> dict[str, str | int]:
@@ -148,7 +199,9 @@ def qualifier_parts(qualifier: str) -> dict[str, str | int]:
     for token in qualifier.split("-")[1:]:
         for kind, pattern in QUALIFIER_KINDS:
             if pattern.fullmatch(token):
-                if kind in THRESHOLD_KINDS:
+                if kind == "size":
+                    parts[kind] = SCREEN_SIZES[token]
+                elif kind in THRESHOLD_KINDS:
                     parts[kind] = int(re.sub(r"\D", "", token))
                 elif kind == "locale" and "locale" in parts:
                     parts[kind] = f"{parts[kind]}-{token}"
@@ -157,14 +210,16 @@ def qualifier_parts(qualifier: str) -> dict[str, str | int]:
                 break
         else:
             parts[f"unknown:{token}"] = token
+    if isinstance(parts.get("locale"), str):
+        parts["locale"] = canonical_locale(parts["locale"])
     return parts
 
 
-# Qualifiers whose Android matching is not exact equality and that this
-# resolver does not model: screen size falls back to smaller sizes, density
-# picks the closest bucket and scales, and BCP-47 locales (b+en+US) need
-# normalization. Directories using them are reported as unchecked.
-UNMODELED_KINDS = {"size", "density"}
+# Qualifiers whose Android matching this resolver does not model. Density
+# picks the closest bucket, prefers scaling a higher density down, and
+# treats nodpi and anydpi specially. Directories using them are reported as
+# unchecked instead. See docs/resource-qualifiers.md.
+UNMODELED_KINDS = {"density"}
 
 
 def unmodeled_qualifiers(qualifier: str) -> set[str]:
@@ -173,18 +228,50 @@ def unmodeled_qualifiers(qualifier: str) -> set[str]:
         if kind in UNMODELED_KINDS:
             out.add(kind)
         elif kind == "locale" and str(value).startswith("b+"):
-            out.add("BCP-47 locale")
+            # Left unchanged by canonical_locale: a variant or other subtag.
+            out.add("BCP-47 variant")
+        elif kind == "locale" and locale_parts(str(value))[1] is not None:
+            # Android infers a script for every device locale (zh-TW is
+            # Hant); without that inference the match would be a guess.
+            out.add("BCP-47 script")
         elif kind.startswith("unknown:"):
             out.add(f"알 수 없는 한정자 {value}")
     return out
 
 
+def unchecked_qualifiers(qualifiers: set[str]) -> dict[str, set[str]]:
+    """Directories this resolver does not judge, with the reasons.
+
+    Besides the per-directory reasons of `unmodeled_qualifiers`, a regional
+    directory is unchecked when its language also appears with another
+    region. Android does not require the region to match when the scripts
+    agree, so an es-US device can take values-b+es+419; the better region is
+    then chosen by CLDR region distance, which this resolver does not model.
+    """
+    out = {q: unmodeled_qualifiers(q) for q in qualifiers}
+    regional: dict[str, dict[str, str]] = {}
+    for q in qualifiers:
+        locale = qualifier_parts(q).get("locale")
+        if not isinstance(locale, str) or out[q]:
+            continue
+        lang, _, region = locale_parts(locale)
+        if region is not None:
+            regional.setdefault(lang, {})[q] = region
+    for dirs in regional.values():
+        if len(set(dirs.values())) > 1:
+            for q in dirs:
+                out[q].add("region fallback")
+    return {q: reasons for q, reasons in out.items() if reasons}
+
+
 def device_config(qualifier: str) -> dict[str, str | int]:
     """The API 35 device configuration that `qualifier` describes. A device is
-    always in day or night mode, so an unspecified mode means `notnight`."""
+    always in day or night mode, so an unspecified mode means `notnight`, and
+    always has a screen size, so an unspecified size means `normal`."""
     config = qualifier_parts(qualifier)
     config["version"] = DEVICE_API
     config.setdefault("night", "notnight")
+    config.setdefault("size", NORMAL_SIZE)
     return config
 
 
@@ -210,10 +297,18 @@ def config_name(config: dict) -> str:
             kind == "version"
             or kind not in config
             or (kind == "night" and config[kind] == "notnight")
+            or (kind == "size" and config[kind] == NORMAL_SIZE)
         ):
             continue
         value = config[kind]
-        tokens.append(f"{kind}{value}dp" if kind in ("sw", "w", "h") else str(value))
+        if kind in ("sw", "w", "h"):
+            tokens.append(f"{kind}{value}dp")
+        elif kind == "size":
+            tokens.append(SCREEN_SIZE_NAMES[value])
+        elif kind == "locale":
+            tokens.append(locale_qualifier(value))
+        else:
+            tokens.append(str(value))
     tokens += [str(v) for k, v in config.items() if k.startswith("unknown:")]
     return "-".join(["values", *tokens])
 
@@ -226,8 +321,15 @@ def _matches(directory: dict, config: dict) -> bool:
                 return False
         elif kind == "locale":
             want = config.get("locale")
-            if not isinstance(want, str) or not (
-                want == value or want.split("-")[0] == value
+            if not isinstance(want, str):
+                return False
+            lang, script, region = locale_parts(value)
+            w_lang, w_script, w_region = locale_parts(want)
+            # A part the directory leaves out matches any device value.
+            if (
+                lang != w_lang
+                or script not in (None, w_script)
+                or region not in (None, w_region)
             ):
                 return False
         elif config.get(kind) != value:
@@ -243,14 +345,26 @@ def best_match(qualifiers: set[str], config: dict) -> str | None:
         if not any(kind in d for _, d in candidates):
             continue
         with_kind = [(q, d) for q, d in candidates if kind in d]
-        if kind in THRESHOLD_KINDS:
+        if kind == "size":
+            # Unlike other qualifiers, an unqualified size is not eliminated:
+            # it counts as `normal` on a device that is at least `normal`.
+            # On a tie the explicit size wins (values-normal over values).
+            device = config.get("size", NORMAL_SIZE)
+            unset = NORMAL_SIZE if device >= NORMAL_SIZE else 0
+            sizes = [(q, d, d.get("size", unset)) for q, d in candidates]
+            top = max(s for _, _, s in sizes)
+            at_top = [(q, d) for q, d, s in sizes if s == top]
+            with_kind = [(q, d) for q, d in at_top if "size" in d] or at_top
+        elif kind in THRESHOLD_KINDS:
             top = max(d[kind] for _, d in with_kind)
             with_kind = [(q, d) for q, d in with_kind if d[kind] == top]
         elif kind == "locale":
-            exact = [
-                (q, d) for q, d in with_kind if d["locale"] == config.get("locale")
-            ]
-            with_kind = exact or with_kind
+            # All remaining locales match; the most specific one wins.
+            def specificity(d: dict) -> int:
+                return sum(x is not None for x in locale_parts(d["locale"])[1:])
+
+            top = max(specificity(d) for _, d in with_kind)
+            with_kind = [(q, d) for q, d in with_kind if specificity(d) == top]
         candidates = with_kind
     return candidates[0][0] if candidates else None
 
