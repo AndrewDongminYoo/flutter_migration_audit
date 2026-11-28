@@ -3,16 +3,18 @@
 A hit is a chunk from the gold doc, in the gold snapshot, that contains the
 gold sentence (and has the gold heading, if given). A "wrong version" result
 is a chunk from the same doc and section in a different snapshot: the text
-looks right, but it is the wrong revision.
+looks right, but it is the wrong revision. "The same doc" is the manifest's
+doc_key, so a doc that moved between snapshots still counts.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
-from .corpus import ROOT, Chunk, normalize
+from .corpus import MANIFESTS, ROOT, Chunk, normalize
 from .evidence import LATEST
 
 QUESTIONS = ROOT / "eval" / "questions.jsonl"
@@ -55,8 +57,24 @@ def doc_path(chunk: Chunk) -> str:
     return chunk.doc_id.split(":", 1)[1]
 
 
+@cache
+def _doc_keys() -> dict[str, str]:
+    keys = {}
+    for manifest in MANIFESTS:
+        path = ROOT / "data" / "manifest" / manifest
+        for line in path.open(encoding="utf-8"):
+            doc = json.loads(line)
+            keys[doc["doc_id"]] = doc.get("doc_key") or doc["path"]
+    return keys
+
+
+def question_key(q: Question) -> str:
+    """The doc_key of the question's gold doc."""
+    return _doc_keys().get(f"{q.gold_snapshot}:{q.path}", q.path)
+
+
 def matches_text(chunk: Chunk, q: Question) -> bool:
-    if doc_path(chunk) != q.path:
+    if chunk.doc_key != question_key(q):
         return False
     if q.heading and chunk.heading != q.heading:
         return False
@@ -74,6 +92,6 @@ def gold_sections(chunks: list[Chunk], q: Question) -> set[str]:
 def is_wrong_version(chunk: Chunk, q: Question, sections: set[str]) -> bool:
     return (
         chunk.snapshot_id != q.gold_snapshot
-        and doc_path(chunk) == q.path
+        and chunk.doc_key == question_key(q)
         and (chunk.heading in sections or matches_text(chunk, q))
     )

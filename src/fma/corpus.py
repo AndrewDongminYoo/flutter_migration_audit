@@ -38,6 +38,9 @@ class Chunk:
     text: str
     url: str
     revision: str  # website commit or framework tag
+    # The same document across snapshots, even after a move (see
+    # scripts/fetch_snapshots.py); API docs keep their path.
+    doc_key: str = ""
 
     @cached_property
     def normalized(self) -> str:
@@ -94,6 +97,7 @@ def load_chunks(root: Path = ROOT) -> list[Chunk]:
                         text=text,
                         url=doc["url"],
                         revision=doc.get("commit") or doc.get("tag"),
+                        doc_key=doc.get("doc_key") or doc["path"],
                     )
                 )
     return chunks
