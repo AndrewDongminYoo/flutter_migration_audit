@@ -2,6 +2,7 @@
 after the snapshot, heading, and sentence checks, so switching retrievers
 must not change any judgement or quote."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,8 @@ TARGET = release_for("3.27.0")
 SPECS = list(E.values()) + [
     mode_spec(m) for m in ("leanBack", "immersive", "immersiveSticky", "manual")
 ]
+# Set in CI, where the embedding tests must run instead of skipping.
+REQUIRE_INDEX_ENV = "FMA_REQUIRE_EMBEDDING_INDEX"
 
 
 @pytest.fixture(scope="session")
@@ -27,9 +30,12 @@ def dense(index):
     from fma.dense import Dense
 
     try:
-        # Never build in tests: a cold build takes about 15 minutes.
+        # Never build in tests: a cold build takes several minutes.
         return Dense(cli_chunks(load_chunks()), build=False)
     except FileNotFoundError:
+        # CI builds or restores the index, so a missing one there is a failure.
+        if os.environ.get(REQUIRE_INDEX_ENV):
+            pytest.fail(f"embedding index missing although {REQUIRE_INDEX_ENV} is set")
         pytest.skip("embedding index not built (run `uv run fma index`)")
 
 
