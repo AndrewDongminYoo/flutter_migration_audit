@@ -91,6 +91,12 @@ E = {
         "Android plans for the workaround detailed here to be temporary",
         kinds=BC,
     ),
+    "launch_switch": Spec(
+        "launch_switch",
+        "splash screen launch theme normal theme FlutterActivity NormalTheme meta-data switch",
+        "to be applied to `FlutterActivity` after the launch screen is gone",
+        heading="Initializing the app",
+    ),
     "opt_out_night": Spec(
         "opt_out_night",
         "opt out edge-to-edge windowOptOutEdgeToEdgeEnforcement night mode styles values-night",
@@ -385,9 +391,20 @@ class Auditor:
     def already_spec(self) -> Spec:
         return E["edge_default"]
 
-    def theme(self) -> tuple[str, list[Clue]]:
-        name, clue = self.inputs.normal_theme or ("NormalTheme", None)
-        return name, [clue] if clue else []
+    def theme(self) -> tuple[str | None, list[Clue]]:
+        """The theme the app screen uses: the NormalTheme meta-data, else the
+        activity's own theme, which Flutter keeps without the meta-data.
+        None when a manifest was given but names neither. Without a manifest,
+        the template's NormalTheme."""
+        inp = self.inputs
+        if inp.ambiguous_themes:
+            return None, []  # several FlutterActivities, none the launcher
+        if inp.normal_framework and not inp.normal_theme:
+            return None, []  # the meta-data names a theme styles.xml cannot hold
+        found = inp.normal_theme or inp.launch_theme
+        if found:
+            return found[0], [found[1]]
+        return (None if inp.manifest_provided else "NormalTheme"), []
 
     def opt_out_state(self, api: int) -> OptOutResolution | None:
         """Resolve the theme's opt-out on a device that runs `api`. Return the
@@ -407,6 +424,68 @@ class Auditor:
             )
             return None
         theme_name, clues = self.theme()
+        if theme_name is None:
+            framework = inp.normal_framework or inp.framework_theme
+            if inp.ambiguous_themes:
+                names = ", ".join(f"`{t}`" for t, _ in inp.ambiguous_themes)
+                reason = (
+                    f"NormalTheme meta-data가 있는 activity가 여럿이고({names}) 그중 실행 activity를 "
+                    "정할 수 없어, 어느 스타일의 opt-out을 봐야 할지 알 수 없습니다."
+                )
+                framework = None
+            elif framework:
+                reason = (
+                    f"FlutterActivity가 앱 스타일이 아닌 `{framework[0]}` 테마를 써서, "
+                    "styles.xml에서 opt-out 여부를 판단할 수 없습니다."
+                )
+            else:
+                reason = (
+                    "AndroidManifest.xml에서 FlutterActivity의 테마(NormalTheme meta-data나 "
+                    "android:theme)를 찾지 못해, 어느 스타일의 opt-out을 봐야 할지 알 수 없습니다."
+                )
+            self.add(
+                "opt_out",
+                title,
+                NEEDS_CHECK,
+                reason,
+                (
+                    [c for _, c in inp.ambiguous_themes]
+                    if inp.ambiguous_themes
+                    else [framework[1]] if framework else []
+                ),
+                specs=[E["launch_switch"]],
+                check=(
+                    "실제로 실행되는 FlutterActivity가 어느 것인지 확인하고, 그 activity의 NormalTheme 스타일을 확인하세요."
+                    if inp.ambiguous_themes
+                    else (
+                        "이 테마에 opt-out 항목이 있는지, 코드에서 테마를 바꾸는지 확인하세요."
+                        if framework
+                        else "FlutterActivity가 쓰는 테마를 확인하고, 그 activity가 들어 있는 AndroidManifest.xml을 넣어 주세요."
+                    )
+                ),
+            )
+            return None
+        for clue in inp.merge_directives:
+            note = (
+                f"`{clue.file}`의 {clue.line}행에 manifest 병합 지시(tools:node 등)가 있습니다. "
+                "병합 결과는 계산하지 않았으므로, 이 manifest를 쓰는 빌드에서는 테마가 다를 수 있습니다."
+            )
+            if note not in self.notes:
+                self.notes.append(note)
+        for other, clue in inp.other_themes:
+            note = (
+                f"`{clue.file}`의 {clue.line}행은 `{other}` 테마를 지정하지만, "
+                "먼저 읽은 기본 manifest의 테마로 판단했습니다. 이 manifest를 쓰는 빌드에서는 결과가 다를 수 있습니다."
+            )
+            if note not in self.notes:
+                self.notes.append(note)
+        if not inp.normal_theme and inp.launch_theme:
+            note = (
+                f"AndroidManifest.xml에 NormalTheme meta-data가 없어, FlutterActivity가 계속 쓰는 "
+                f"`{theme_name}` 스타일로 판단했습니다."
+            )
+            if note not in self.notes:
+                self.notes.append(note)
         day = resolve_opt_out(inp.styles, theme_name, "values", api)
         if day is None:
             self.add(
@@ -455,6 +534,7 @@ class Auditor:
         inp = self.inputs
         title = OPT_OUT_TITLE
         theme_name, clues = self.theme()
+        assert theme_name is not None  # opt_out_state resolved it
         own = day.styles[0]
         inherited = day.source is not None and day.source != theme_name
         if day.value:
@@ -820,10 +900,122 @@ class Auditor:
     def device(self) -> str:
         return f"{self.android}(API {self.api})"
 
+    def launch_theme(self) -> None:
+        """Report a configuration where the launch theme's opt-out differs
+        from the app theme's: the launch screen then draws differently from
+        the app screen."""
+        inp = self.inputs
+        if not (inp.normal_theme and inp.launch_theme and inp.styles_provided):
+            return
+        (normal_name, normal_clue), (launch_name, launch_clue) = (
+            inp.normal_theme,
+            inp.launch_theme,
+        )
+        if normal_name == launch_name:
+            return
+        unchecked = set(unchecked_qualifiers({s.qualifier for s in inp.styles}))
+        variants, combos = self.variant_configs(unchecked)
+        configs: list[tuple[str | None, str | dict]] = [(None, "values")]
+        configs += [(config_name(c), c) for c in variants or []]
+
+        def compare(config):
+            """Both resolutions when both are known, else None."""
+            normal = resolve_opt_out(inp.styles, normal_name, config, self.api)
+            launch = resolve_opt_out(inp.styles, launch_name, config, self.api)
+            if normal is None or launch is None:
+                return None
+            if any(r.unresolved_value or r.missing_parent for r in (normal, launch)):
+                return None
+            return normal, launch
+
+        found = None
+        for label, config in configs:
+            pair = compare(config)
+            if pair and self.launch_differs(bool(pair[0].value), bool(pair[1].value)):
+                found = (label, *pair)
+                break
+        if found is None:
+            # Other configurations were not compared; say so only when the
+            # default was compared and showed nothing.
+            if variants is None and compare("values") is not None:
+                self.launch_unchecked(
+                    launch_name, normal_name, combos, [launch_clue, normal_clue]
+                )
+            return
+        label, normal, launch = found
+        where = "기본 설정에서" if label is None else f"`{label}` 설정에서"
+        reason, specs, check = self.launch_message(
+            where, normal_name, launch_name, bool(launch.value)
+        )
+        if self.conditional:
+            n = self.tgt.default_target_sdk
+            reason = f"targetSdk가 {josa(n, '이/가')} 된다면: " + reason
+        clues = [launch_clue, normal_clue]
+        clues += [s.clue for r in (launch, normal) for s in r.styles]
+        clues += [r.clue for r in (launch, normal) if r.clue]
+        self.add(
+            "launch_theme",
+            "실행 화면 테마의 opt-out",
+            NEEDS_CHECK,
+            reason,
+            list(dict.fromkeys(clues)),
+            specs,
+            [
+                f"{self.device} 에뮬레이터에서 앱을 처음 실행해 실행 화면과 첫 화면의 상태바 영역을 비교한다."
+            ],
+            check=check,
+        )
+
+    def launch_differs(self, normal: bool, launch: bool) -> bool:
+        return normal != launch
+
+    def launch_unchecked(
+        self, launch_name: str, normal_name: str, combos: int, clues: list[Clue]
+    ) -> None:
+        prefix = (
+            f"targetSdk가 {josa(self.tgt.default_target_sdk, '이/가')} 된다면: "
+            if self.conditional
+            else ""
+        )
+        self.add(
+            "launch_theme",
+            "실행 화면 테마의 opt-out",
+            NEEDS_CHECK,
+            f"{prefix}기본 설정에서는 실행 화면의 `{launch_name}` 스타일과 앱 화면의 `{normal_name}` 스타일 사이에 "
+            f"알릴 차이가 없습니다. 하지만 리소스 한정자 조합이 {combos}개라서 다른 기기 설정은 비교하지 않았습니다.",
+            clues,
+            self.launch_specs,
+            check=self.launch_unchecked_check,
+        )
+
+    @property
+    def launch_specs(self) -> list[Spec]:
+        return [E["launch_switch"]]
+
+    launch_unchecked_check = (
+        "다크 모드 등 다른 설정의 두 스타일에서 opt-out 항목이 같은지 직접 확인하세요."
+    )
+
+    def launch_message(
+        self, where: str, normal_name: str, launch_name: str, launch_opted: bool
+    ) -> tuple[str, list[Spec], str]:
+        has, lacks = (
+            (launch_name, normal_name) if launch_opted else (normal_name, launch_name)
+        )
+        return (
+            f"{self.device} 기기의 {where} `{has}` 스타일에는 opt-out 항목이 있지만 "
+            f"`{lacks}` 스타일에는 없습니다. 실행 화면은 `{launch_name}` 스타일로 그려지고, "
+            f"실행 화면이 사라진 뒤 Flutter가 `{normal_name}` 스타일로 바꿉니다. "
+            "그래서 실행 화면과 앱 화면이 시스템 바를 다르게 처리할 수 있습니다.",
+            self.launch_specs,
+            "실행 화면도 앱 화면과 같게 그리려면 두 스타일의 opt-out 항목을 맞추세요.",
+        )
+
     def run(self) -> None:
         if not self.target_sdk():
             return
         opted = self.opt_out()
+        self.launch_theme()
         if opted:
             return
         self.ui_mode()
@@ -846,6 +1038,33 @@ class Android16Auditor(Auditor):
     already_state = "Android 16 기기에서 opt-out이 무시되던 상태입니다."
 
     @property
+    def launch_specs(self) -> list[Spec]:
+        return [A16["opt_out_ignored"], E["launch_switch"]]
+
+    launch_unchecked_check = (
+        "다크 모드 등 다른 설정에서 실행 화면 스타일에만 opt-out 항목이 있는지 직접 확인하세요. "
+        "있다면 targetSdk 36에서는 그 opt-out이 무시되어 실행 화면이 edge-to-edge로 바뀝니다."
+    )
+
+    def launch_differs(self, normal: bool, launch: bool) -> bool:
+        # After the upgrade Android 16 ignores both opt-outs. The launch
+        # screen changes only when its own theme opts out; the app theme's
+        # loss is the opt_out finding.
+        return launch and not normal
+
+    def launch_message(
+        self, where: str, normal_name: str, launch_name: str, launch_opted: bool
+    ) -> tuple[str, list[Spec], str]:
+        return (
+            f"{self.device} 기기의 {where} 실행 화면에 쓰이는 `{launch_name}` 스타일에는 "
+            f"opt-out 항목이 있지만, 앱 화면의 `{normal_name}` 스타일에는 없습니다. "
+            f"targetSdk가 {josa(self.api, '이/가')} 되면 Android 16 기기에서는 이 opt-out이 무시되어, "
+            "실행 화면도 앱 화면처럼 edge-to-edge로 그려집니다.",
+            self.launch_specs,
+            "실행 화면이 상태바·내비게이션 바 뒤까지 그려져도 괜찮은지 확인하세요.",
+        )
+
+    @property
     def target_default_spec(self) -> Spec:
         return A16["target_default"]
 
@@ -858,6 +1077,8 @@ class Android16Auditor(Auditor):
         if Android 16 changes it, None if unknown."""
         day = self.opt_out_state(self.api)
         theme_name, clues = self.theme()
+        if theme_name is None:
+            return None
         unchecked = set(unchecked_qualifiers({s.qualifier for s in self.inputs.styles}))
         configs, combos = self.variant_configs(unchecked)
         opted: dict[tuple, tuple[list[dict], OptOutResolution]] = {}

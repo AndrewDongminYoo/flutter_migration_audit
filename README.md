@@ -13,6 +13,7 @@ Flutter 업그레이드가 내 앱의 Android 시스템 바와 edge-to-edge 동�
 - 업그레이드 구간: Flutter 3.24.x → 3.27.x(`targetSdk` 기본값 34 → 35, Android 15), 3.32.x → 3.35.x(35 → 36, Android 16). 구간을 건너뛰는 업그레이드(예: 3.27 → 3.35)는 받지 않습니다.
 - 주제: Android 시스템 바와 edge-to-edge (`targetSdk`, opt-out 스타일, `SystemUiMode`, `SafeArea`·`AppBar`, 시스템 바 색상)
 - 입력: `android/app/build.gradle(.kts)`, `AndroidManifest.xml`, `res/values*/styles.xml`, Dart 파일. 프로젝트 전체가 아니라 일부만 넣어도 됩니다.
+- 판단하는 테마: `AndroidManifest.xml`에서 FlutterActivity의 `NormalTheme` meta-data가 가리키는 스타일을 판단합니다. meta-data가 없으면 activity의 `android:theme`(없으면 application의 테마)를 판단합니다. 실행 화면 테마(`LaunchTheme`)의 opt-out 여부가 이 스타일과 다르면(다크 모드 같은 다른 기기 설정에서만 다른 경우 포함) `추가 확인 필요`로 따로 알립니다. 3.32 → 3.35 구간에서는 업그레이드 후 두 스타일의 opt-out이 모두 무시되므로, 실행 화면 테마에만 opt-out이 있어 실행 화면이 바뀌는 경우만 알립니다. manifest를 넣었는데 테마를 찾지 못하면 opt-out 항목을 `추가 확인 필요`로 판단하고, manifest를 넣지 않으면 템플릿 기본값인 `NormalTheme`을 판단합니다. manifest가 여러 개이면 기본 소스 세트인 `src/main`의 manifest로 판단합니다(`src/main`이 없으면 먼저 넣은 manifest). 빌드 유형별 manifest(예: `src/debug`)가 다른 테마나 병합 지시(`tools:node` 등)를 담고 있으면 리포트에 메모로 알립니다. NormalTheme meta-data가 있는 activity가 여럿이면 실행(LAUNCHER) activity를 판단하고, 실행 activity를 정할 수 없으면 opt-out 항목을 `추가 확인 필요`로 판단합니다.
 - 제외: GitHub 연동, 코드 자동 수정, 위 두 구간 밖의 업그레이드
 
 ## 사용법
@@ -44,7 +45,7 @@ uv run fma audit --from 3.24.5 --to 3.27.1 --input samples/player_default --retr
 uv run fma audit --from 3.32.5 --to 3.35.1 --input samples/player_opt_out
 ```
 
-근거 후보는 기본적으로 목표 버전 스냅샷 안에서 임베딩 검색으로 찾습니다. CLI용 임베딩 인덱스에는 근거로 쓰일 수 있는 섹션만 넣습니다. 목표 버전의 breaking change·API·가이드 문서, 3.35의 릴리스 노트(`targetSdk` 기본값 변경), 그리고 이후에 고쳐진 내용을 위한 현재 판본의 breaking change 문서입니다. 전체 코퍼스의 55%이고, 검색 비교 실험만 전체 코퍼스를 임베딩합니다. 검색 방식과 관계없이, 후보가 근거로 채택되려면 정해 둔 판본과 정답 문장을 모두 만족해야 합니다. 그래서 검색 방식을 바꿔도 판단 결과는 같고, 달라지는 것은 근거를 찾기까지 살펴보는 후보의 순서입니다.
+근거 후보는 기본적으로 목표 버전 스냅샷 안에서 임베딩 검색으로 찾습니다. CLI용 임베딩 인덱스에는 근거로 쓰일 수 있는 섹션만 넣습니다. 목표 버전의 breaking change·API·가이드 문서, 3.35의 릴리스 노트(`targetSdk` 기본값 변경), 그리고 이후에 고쳐진 내용을 위한 현재 판본의 breaking change 문서입니다. 전체 코퍼스의 56%이고, 검색 비교 실험만 전체 코퍼스를 임베딩합니다. 검색 방식과 관계없이, 후보가 근거로 채택되려면 정해 둔 판본과 정답 문장을 모두 만족해야 합니다. 그래서 검색 방식을 바꿔도 판단 결과는 같고, 달라지는 것은 근거를 찾기까지 살펴보는 후보의 순서입니다.
 
 ## 실행 결과 예시
 
