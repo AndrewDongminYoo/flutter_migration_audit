@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from fma.rules import AFFECTED, NEEDS_CHECK, NOT_AFFECTED, audit, particle
+from fma.rules import AFFECTED, NEEDS_CHECK, NOT_AFFECTED, audit
 from fma.signals import AppInputs, discover, read_gradle, read_manifest, read_styles
 from fma.versions import check_range, release_for
 
@@ -43,18 +43,6 @@ def test_range_is_supported():
     assert release_for("3.35.0").snapshot_id == "flutter-3.35"
 
 
-def test_particles_follow_the_number():
-    assert particle(35, "을", "를") == "를" and particle(36, "을", "를") == "을"
-    assert particle(35, "이", "가") == "가" and particle(36, "이", "가") == "이"
-    # 로 after a vowel or ㄹ, 으로 after other final consonants.
-    assert [particle(n, "으로", "로", after_l="로") for n in (15, 16, 17, 33)] == [
-        "로",
-        "으로",
-        "로",
-        "으로",
-    ]
-
-
 def test_opted_out_app_loses_the_opt_out_on_android16(index):
     report = audit("3.32.5", "3.35.1", discover(SAMPLES / "player_opt_out"), index)
     target = finding(report, "target_sdk")
@@ -89,7 +77,7 @@ def test_explicit_target_35_is_not_changed_by_the_upgrade(index):
         index,
     )
     f = finding(report, "target_sdk")
-    assert f.verdict == NOT_AFFECTED and "36으로 올리는 시점" in f.reason
+    assert f.verdict == NOT_AFFECTED and "36으로 올리면" in f.reason
     assert [x.key for x in report.findings] == ["target_sdk"]
 
 
@@ -202,3 +190,66 @@ def test_unchecked_directories_keep_the_android16_check_open(index):
     assert finding(report, "opt_out").verdict == NOT_AFFECTED
     f = finding(report, "opt_out_variant")
     assert f.verdict == NEEDS_CHECK and "`values-xhdpi`" in f.reason
+
+
+def test_opt_out_only_in_night_styles_is_lost(index):
+    """Subagent review: a dark-mode style that opts out on Android 16 loses
+    the opt-out at targetSdk 36, although the default style has none."""
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", xml(None)), ("values-night", xml("true"))),
+        index,
+    )
+    f = finding(report, "opt_out")
+    assert f.verdict == AFFECTED and "`values-night`" in f.reason
+    assert finding(report, "opt_out_android16").verdict == NEEDS_CHECK
+    assert any(x.key == "layout" for x in report.findings)
+
+
+def test_night_opt_out_under_values_v36(index):
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(
+            ("values", xml("true")),
+            ("values-v36", xml(None)),
+            ("values-night-v36", xml("true")),
+        ),
+        index,
+    )
+    f = finding(report, "opt_out")
+    assert f.verdict == AFFECTED and "`values-night`" in f.reason
+
+
+def test_night_styles_without_the_item_stay_unaffected(index):
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", xml(None)), ("values-night", xml(None))),
+        index,
+    )
+    assert [(f.key, f.verdict) for f in report.findings] == [
+        ("target_sdk", AFFECTED),
+        ("opt_out", NOT_AFFECTED),
+    ]
+
+
+@pytest.mark.parametrize(
+    "text, quote",
+    [
+        ("- other item\n- the needle sentence\n- trailing item", "the needle sentence"),
+        ("- outer\n  - the needle sentence\n- trailing", "the needle sentence"),
+        # Numbered items read as one argument, so the list is quoted whole.
+        (
+            "1. other item\n2. the needle sentence",
+            "1. other item 2. the needle sentence",
+        ),
+    ],
+)
+def test_quote_is_the_bullet_item_that_holds_the_sentence(text, quote):
+    from fma.corpus import Chunk
+    from fma.evidence import quote_for
+
+    chunk = Chunk("c#0", "c", "flutter-3.35", "release-notes", "t", "h", text, "u", "r")
+    assert quote_for(chunk, "needle sentence") == quote

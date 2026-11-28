@@ -88,6 +88,9 @@ def accept(chunk: Chunk, spec: Spec, target: Release) -> bool:
 
 MD_REF_LINK = re.compile(r"\[([^\]]+)\]\[[^\]]*\]")
 MD_INLINE_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+# A bullet list item marker at the start of a line. Numbered lists stay
+# whole: their items read as one argument (the 3.27 opt-out note is
+# "1. ... temporary. 2. ... migrate before the OS removes the opt-out").
 LIST_ITEM = re.compile(r"^\s*[*-]\s+", re.M)
 
 

@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass, field
 
 from .evidence import Evidence, Spec, resolve
+from .korean import josa
 from .retrieval import Retriever
 from .signals import (
     THRESHOLD_KINDS,
@@ -29,6 +30,8 @@ from .versions import EDGE_TO_EDGE_API, Release, android_name, check_range
 
 AFFECTED, NOT_AFFECTED, NEEDS_CHECK = "affected", "not_affected", "needs_check"
 OPT_OUT_TITLE = "edge-to-edge opt-out 설정"
+# This upgrade changes the opt-out only on Android 16 devices.
+ONLY_ANDROID16 = "이번 업그레이드로 opt-out이 무시되는 것은 Android 16 기기뿐입니다."
 LABELS = {
     AFFECTED: "영향 있음",
     NOT_AFFECTED: "영향 없음",
@@ -209,26 +212,6 @@ def all_specs(release: Release) -> list[Spec]:
     return specs + [mode_spec(m) for m in UI_MODES]
 
 
-def particle(
-    n: int, after_final: str, after_vowel: str, after_l: str | None = None
-) -> str:
-    """The Korean particle that follows the number `n` read aloud (35 is
-    삼십오, 36 is 삼십육). `after_l` is the form used after a final ㄹ, such as
-    로 in 으로/로."""
-    last = n % 10
-    if after_l is not None and last in (1, 7, 8):
-        return after_l
-    return after_final if last in (0, 1, 3, 6, 7, 8) else after_vowel
-
-
-def ro(n: int) -> str:
-    return particle(n, "으로", "로", after_l="로")
-
-
-def android_number(api: int) -> int:
-    return int(re.findall(r"\d+", android_name(api))[-1])
-
-
 @dataclass
 class Finding:
     key: str
@@ -279,9 +262,7 @@ class Auditor:
             )
         if self.conditional and finding.verdict != NEEDS_CHECK:
             n = self.tgt.default_target_sdk
-            finding.reason = (
-                f"targetSdk가 {n}{particle(n, '이', '가')} 된다면: " + finding.reason
-            )
+            finding.reason = f"targetSdk가 {josa(n, '이/가')} 된다면: " + finding.reason
             finding.verdict = NEEDS_CHECK
             finding.check = finding.check or "targetSdk 값을 먼저 확인하세요."
         self.findings.append(finding)
@@ -312,7 +293,7 @@ class Auditor:
                 "target_sdk",
                 title,
                 NEEDS_CHECK,
-                f"{where}. 기본값(flutter.targetSdkVersion)을 쓰면 {cur}에서 {tgt}로 바뀝니다.",
+                f"{where}. 기본값(flutter.targetSdkVersion)을 쓰면 {cur}에서 {josa(tgt, '으로/로')} 바뀝니다.",
                 specs=[self.target_default_spec],
                 check="android/app/build.gradle(.kts)의 targetSdk 값을 확인하세요.",
             )
@@ -323,7 +304,7 @@ class Auditor:
                 "target_sdk",
                 title,
                 AFFECTED,
-                f"targetSdk가 flutter.targetSdkVersion을 따르므로 API {cur}에서 API {tgt}({android_name(tgt)}){ro(android_number(tgt))} 바뀝니다.",
+                f"targetSdk가 flutter.targetSdkVersion을 따르므로 API {cur}에서 {josa(f'API {tgt}({android_name(tgt)})', '으로/로')} 바뀝니다.",
                 [ts.clue],
                 [self.target_default_spec],
                 [compare],
@@ -334,8 +315,8 @@ class Auditor:
                 "target_sdk",
                 title,
                 NOT_AFFECTED,
-                f"targetSdk를 {ts.explicit}{ro(ts.explicit)} 직접 지정해서 이번 업그레이드로는 바뀌지 않습니다. "
-                f"{EDGE_TO_EDGE_API}{ro(EDGE_TO_EDGE_API)} 올리는 시점에 같은 영향이 생깁니다.",
+                f"targetSdk를 {josa(ts.explicit, '으로/로')} 직접 지정해서 이번 업그레이드로는 바뀌지 않습니다. "
+                f"{josa(EDGE_TO_EDGE_API, '으로/로')} 올리는 시점에 같은 영향이 생깁니다.",
                 [ts.clue],
                 [E["target_explicit"]],
             )
@@ -350,13 +331,13 @@ class Auditor:
                 "target_sdk",
                 title,
                 NOT_AFFECTED,
-                f"targetSdk를 {ts.explicit}{ro(ts.explicit)} 직접 지정해서 이번 업그레이드로는 바뀌지 않습니다. "
-                f"{tgt}{ro(tgt)} 올리는 시점에 {android_name(tgt)} 동작 변경의 영향이 생깁니다.",
+                f"targetSdk를 {josa(ts.explicit, '으로/로')} 직접 지정해서 이번 업그레이드로는 바뀌지 않습니다. "
+                f"{josa(tgt, '으로/로')} 올리면 {android_name(tgt)} 동작 변경의 영향을 받을 수 있으니, 그때 다시 분석하세요.",
                 [ts.clue],
                 [A16["opt_out_ignored"]],
             )
             self.notes.append(
-                f"targetSdk가 {ts.explicit}{ro(ts.explicit)} 고정되어 있어 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
+                f"targetSdk가 {josa(ts.explicit, '으로/로')} 고정되어 있어 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
             )
             return False
         if ts.explicit is not None and ts.explicit == tgt:
@@ -364,13 +345,13 @@ class Auditor:
                 "target_sdk",
                 title,
                 NOT_AFFECTED,
-                f"이미 targetSdk {tgt}{particle(tgt, '을', '를')} 직접 지정하고 있어 Flutter 버전과 관계없이 "
+                f"이미 targetSdk {josa(tgt, '을/를')} 직접 지정하고 있어 Flutter 버전과 관계없이 "
                 f"{self.already_state} 이번 업그레이드로 바뀌는 것은 없습니다.",
                 [ts.clue],
                 [self.already_spec],
             )
             self.notes.append(
-                f"업그레이드 전부터 targetSdk {tgt}{particle(tgt, '이었', '였')}으므로 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
+                f"업그레이드 전부터 targetSdk {josa(tgt, '이었/였')}으므로 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
             )
             return False
         if ts.explicit is not None:
@@ -378,7 +359,7 @@ class Auditor:
                 "target_sdk",
                 title,
                 NEEDS_CHECK,
-                f"targetSdk {ts.explicit}{particle(ts.explicit, '은', '는')} 이번 구간 문서({self.tgt_label} 기준 {android_name(tgt)})가 다루지 않는 값입니다.",
+                f"targetSdk {josa(ts.explicit, '은/는')} {josa(f'이번 구간 문서({self.tgt_label} 기준 {android_name(tgt)})', '이/가')} 다루지 않는 값입니다.",
                 [ts.clue],
                 check=f"{android_name(tgt + 1)} 이상을 대상으로 할 때의 동작은 이 구간 문서로 판단할 수 없습니다. "
                 f"{android_name(tgt + 1)} 동작 변경 문서를 직접 확인하세요.",
@@ -388,10 +369,10 @@ class Auditor:
             "target_sdk",
             title,
             NEEDS_CHECK,
-            f"targetSdk가 `{ts.raw}`로 설정되어 있어 실제 값을 알 수 없습니다.",
+            f"targetSdk가 `{ts.raw}` 식으로 설정되어 있어 실제 값을 알 수 없습니다.",
             [ts.clue],
             [self.target_default_spec],
-            check=f"`{ts.raw}`가 가리키는 값을 확인하세요. flutter.targetSdkVersion이면 {cur}→{tgt}로 바뀝니다.",
+            check=f"`{ts.raw}` 식이 가리키는 값을 확인하세요. flutter.targetSdkVersion이면 {cur}→{josa(tgt, '으로/로')} 바뀝니다.",
         )
         self.conditional = True
         return True
@@ -434,7 +415,7 @@ class Auditor:
                 "opt_out",
                 title,
                 NEEDS_CHECK,
-                f"앱이 쓰는 스타일 `{theme_name}`이 제공된 res/values/styles.xml에 없습니다.",
+                f"앱이 쓰는 `{theme_name}` 스타일이 제공된 res/values/styles.xml에 없습니다.",
                 clues,
                 check=f"`{theme_name}` 스타일 정의를 찾아 opt-out 항목을 확인하세요.",
             )
@@ -451,7 +432,7 @@ class Auditor:
                 "이 항목이 있으면 부모 스타일의 값은 쓰이지 않습니다.",
                 clues + [day.clue],
                 [E["opt_out_works"]],
-                check=f"`{day.unresolved_value}`가 가리키는 값(예: res/values/bools.xml)을 확인하세요.",
+                check=f"`{day.unresolved_value}` 리소스가 가리키는 값(예: res/values/bools.xml)을 확인하세요.",
             )
             return None
         if day.missing_parent:
@@ -459,7 +440,7 @@ class Auditor:
                 "opt_out",
                 title,
                 NEEDS_CHECK,
-                f"`{theme_name}`의 부모 스타일 `{day.missing_parent}`이 제공된 styles.xml에 없어, "
+                f"`{theme_name}` 스타일의 부모인 `{day.missing_parent}` 스타일이 제공된 styles.xml에 없어, "
                 "opt-out 항목을 상속받는지 확인할 수 없습니다.",
                 clues + [own.clue],
                 [E["opt_out_parent"]],
@@ -485,7 +466,7 @@ class Auditor:
                 else " (AndroidManifest.xml을 받지 못해 이 스타일이 실제로 쓰이는지는 확인하지 않았습니다.)"
             )
             where = (
-                f"`{theme_name}`이 부모 스타일 `{day.source}`에서 opt-out 항목을 상속받아"
+                f"`{theme_name}` 스타일이 부모인 `{day.source}` 스타일에서 opt-out 항목을 상속받아"
                 if inherited
                 else f"`{theme_name}`에 opt-out 항목이 있어"
             )
@@ -518,7 +499,7 @@ class Auditor:
             extra = [day.clue]
         else:
             reason = (
-                f"`{theme_name}`과 그 부모 스타일에 opt-out 항목이 없어 "
+                f"`{theme_name}` 스타일과 그 부모 스타일에 opt-out 항목이 없어 "
                 f"{android_name(EDGE_TO_EDGE_API)} 이상 기기에서 앱이 edge-to-edge로 그려집니다."
             )
             extra = []
@@ -536,6 +517,48 @@ class Auditor:
         return False
 
     MAX_CONFIGS = 256
+
+    def variant_configs(self, unmodeled: set[str]) -> tuple[list[dict] | None, int]:
+        """Every device configuration other than the default that the
+        supplied qualifier values can produce on a device that runs
+        `self.api`, smallest first, with the number of combinations. The list
+        is None when the combinations exceed MAX_CONFIGS."""
+        inp = self.inputs
+        values: dict[str, set] = {}
+        for q in {s.qualifier for s in inp.styles} - unmodeled:
+            for kind, value in qualifier_parts(q).items():
+                if kind == "version":
+                    continue  # every configuration runs the audited device API
+                values.setdefault(kind, set()).add(value)
+        kinds = sorted(values)
+
+        def options(kind: str) -> list:
+            # A device is always in day or night mode, so both are checked
+            # whenever any directory uses the night qualifier, even when
+            # only values-notnight is supplied. Other kinds may be unset.
+            if kind == "night":
+                return ["notnight", "night"]
+            return [None, *sorted(values[kind], key=str)]
+
+        combos = 1
+        for kind in kinds:
+            combos *= len(options(kind))
+        if combos > self.MAX_CONFIGS:
+            return None, combos
+        default = device_config("values", self.api)
+        configs = [dict(default)]
+        for kind in kinds:
+            configs = [
+                c | ({kind: v} if v is not None else {})
+                for c in configs
+                for v in options(kind)
+            ]
+        normalized: list[dict] = []
+        for c in configs:
+            c = normalize_config(c, set(kinds))
+            if c != default and c not in normalized:
+                normalized.append(c)
+        return sorted(normalized, key=len), combos
 
     def opt_out_variants(self, theme_name: str) -> bool:
         """Check the other device configurations the supplied resources can produce.
@@ -559,7 +582,7 @@ class Auditor:
                 "opt_out_variant",
                 "정확히 판단하지 않는 리소스 한정자",
                 NEEDS_CHECK,
-                f"제공된 리소스에 이 도구가 Android 선택 규칙을 정확히 따라가지 않는 한정자({kinds_text})가 있습니다: "
+                f"제공된 리소스에 이 도구가 Android 선택 규칙을 정확히 따라가지 않는 {josa(f'한정자({kinds_text})', '이/가')} 있습니다: "
                 + ", ".join(f"`{q}`" for q in unmodeled)
                 + ". 이 디렉터리의 스타일이 opt-out 판단에 영향을 주는지는 확인하지 않았습니다.",
                 [s.clue for s in inp.styles if s.qualifier in unmodeled][:5],
@@ -568,26 +591,8 @@ class Auditor:
                 ],
                 check="이 디렉터리들의 스타일에서도 opt-out이 유지되는지 직접 확인하세요.",
             )
-        values: dict[str, set] = {}
-        for q in {s.qualifier for s in inp.styles} - set(unmodeled):
-            for kind, value in qualifier_parts(q).items():
-                if kind == "version":
-                    continue  # every configuration runs the audited device API
-                values.setdefault(kind, set()).add(value)
-        kinds = sorted(values)
-
-        def options(kind: str) -> list:
-            # A device is always in day or night mode, so both are checked
-            # whenever any directory uses the night qualifier, even when
-            # only values-notnight is supplied. Other kinds may be unset.
-            if kind == "night":
-                return ["notnight", "night"]
-            return [None, *sorted(values[kind], key=str)]
-
-        combos = 1
-        for kind in kinds:
-            combos *= len(options(kind))
-        if combos > self.MAX_CONFIGS:
+        configs, combos = self.variant_configs(set(unmodeled))
+        if configs is None:
             self.add(
                 "opt_out_variant",
                 "다른 기기 설정의 opt-out",
@@ -597,34 +602,7 @@ class Auditor:
                 check="언어·다크 모드·화면 크기 등 한정자별로 opt-out이 유지되는지 직접 확인하세요.",
             )
             return True
-        default = device_config("values", self.api)
-        configs = [dict(default)]
-        for kind in kinds:
-            configs = [
-                c | ({kind: v} if v is not None else {})
-                for c in configs
-                for v in options(kind)
-            ]
-        normalized: list[dict] = []
-        for c in configs:
-            c = normalize_config(c, set(kinds))
-            if c != default and c not in normalized:
-                normalized.append(c)
-        configs = sorted(normalized, key=len)
         reported: list[tuple[dict, tuple]] = []
-
-        def covers(smaller: dict, larger: dict) -> bool:
-            for k, v in smaller.items():
-                if k not in larger:
-                    return False
-                # Every configuration has a screen size, and the default is
-                # `normal`, not the smallest; a smaller screen with the same
-                # style chain shows nothing new either.
-                if k == "size":
-                    continue
-                if larger[k] != v and not (k in THRESHOLD_KINDS and larger[k] >= v):
-                    return False
-            return True
 
         for config in configs:
             result = resolve_opt_out(inp.styles, theme_name, config)
@@ -643,9 +621,11 @@ class Auditor:
             if result.unresolved_value:
                 detail = f"opt-out 항목 값이 `{result.unresolved_value}`라서 직접 확인할 수 없습니다"
             elif result.value is False:
-                detail = f"`{result.source}`가 opt-out 항목을 `false`로 덮어씁니다"
+                detail = (
+                    f"`{result.source}` 스타일이 opt-out 항목을 `false`로 덮어씁니다"
+                )
             elif result.missing_parent:
-                detail = f"부모 스타일 `{result.missing_parent}`이 입력에 없어 확인할 수 없습니다"
+                detail = f"부모인 `{result.missing_parent}` 스타일이 입력에 없어 확인할 수 없습니다"
             else:
                 detail = "적용되는 스타일 체인에 opt-out 항목이 없습니다"
             used = " → ".join(f"{s.qualifier}/{s.name}" for s in result.styles)
@@ -882,52 +862,107 @@ class Android16Auditor(Auditor):
         if day is None:
             return None
         theme_name, clues = self.theme()
-        own = day.styles[0]
-        inherited = day.source is not None and day.source != theme_name
-        used = " → ".join(f"{s.qualifier}/{s.name}" for s in day.styles)
-        older = android_name(EDGE_TO_EDGE_API)
-        unchanged_older = (
-            f"{older} 이하 기기는 targetSdk {EDGE_TO_EDGE_API}{particle(EDGE_TO_EDGE_API, '과', '와')} "
-            f"{self.api}에서 동작이 같습니다."
-        )
-        if not day.value:
-            cause = (
-                f"{self.device} 기기가 고르는 스타일({used})에서 opt-out 항목이 `false`로 설정되어 있어"
-                if day.value is False
-                else f"{self.device} 기기가 고르는 스타일({used})에 opt-out 항목이 없어"
-            )
+        if day.value:
+            self.lost_opt_out(day, theme_name, clues, None)
+            return False
+        unchecked = set(unchecked_qualifiers({s.qualifier for s in self.inputs.styles}))
+        configs, combos = self.variant_configs(unchecked)
+        if configs is None:
             self.add(
-                "opt_out",
-                OPT_OUT_TITLE,
-                NOT_AFFECTED,
-                f"{cause} 업그레이드 전(targetSdk {EDGE_TO_EDGE_API})부터 Android 16 기기에서도 "
-                f"앱이 edge-to-edge로 그려지고 있었습니다. {unchanged_older}",
-                clues + [own.clue] + ([day.clue] if day.value is False else []),
-                [E["edge_default"]],
+                "opt_out_variant",
+                "다른 기기 설정의 opt-out",
+                NEEDS_CHECK,
+                f"제공된 리소스 한정자 조합이 {combos}개라서 모두 확인하지 않았습니다. "
+                f"{self.device} 기기의 기본 설정에서는 opt-out 항목이 없습니다.",
+                check="언어·다크 모드·화면 크기 등 한정자별로 opt-out 항목이 있는지 직접 확인하세요.",
             )
-            self.notes.append(
-                "업그레이드 전부터 edge-to-edge였으므로 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
-            )
-            self.unchecked_dirs()
             return True
-        where = (
-            f"{self.device} 기기가 고르는 `{own.qualifier}/{theme_name}`이 부모 스타일 `{day.source}`에서 "
-            "opt-out 항목을 상속받아"
-            if inherited
-            else f"{self.device} 기기가 고르는 `{own.qualifier}/{theme_name}`에 opt-out 항목이 있어"
+        opted: list[tuple[dict, OptOutResolution]] = []
+        for config in configs:
+            result = resolve_opt_out(self.inputs.styles, theme_name, config)
+            if result is None or not result.value:
+                continue
+            chain = tuple((s.qualifier, s.name) for s in result.styles)
+            if any(
+                covers(c, config)
+                and tuple((s.qualifier, s.name) for s in r.styles) == chain
+                for c, r in opted
+            ):
+                continue  # a smaller configuration already shows this chain
+            opted.append((config, result))
+        if opted:
+            config, result = opted[0]
+            self.lost_opt_out(
+                result, theme_name, clues, [config_name(c) for c, _ in opted]
+            )
+            return False
+        own = day.styles[0]
+        used = " → ".join(f"{s.qualifier}/{s.name}" for s in day.styles)
+        cause = (
+            f"{self.device} 기기가 고르는 스타일({used})에서 opt-out 항목이 `false`로 설정되어 있어"
+            if day.value is False
+            else f"{self.device} 기기가 고르는 스타일({used})에 opt-out 항목이 없어"
+        )
+        others = (
+            " 입력에 있는 다른 기기 설정(다크 모드 등)에서도 opt-out 항목이 적용되지 않습니다."
+            if configs
+            else ""
         )
         self.add(
             "opt_out",
             OPT_OUT_TITLE,
+            NOT_AFFECTED,
+            f"{cause} 업그레이드 전(targetSdk {EDGE_TO_EDGE_API})부터 Android 16 기기에서도 "
+            f"앱이 edge-to-edge로 그려지고 있었습니다.{others} 이번 업그레이드로 바뀌는 것은 없습니다.",
+            clues + [own.clue] + ([day.clue] if day.value is False else []),
+            [E["edge_default"]],
+        )
+        self.notes.append(
+            "업그레이드 전부터 edge-to-edge였으므로 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
+        )
+        self.unchecked_dirs()
+        return True
+
+    def lost_opt_out(
+        self,
+        result: OptOutResolution,
+        theme_name: str,
+        clues: list[Clue],
+        configs: list[str] | None,
+    ) -> None:
+        """Report an opt-out that Android 16 devices apply now and ignore
+        after the upgrade. `configs` names the device configurations (such
+        as values-night) when the default configuration has no opt-out."""
+        own = result.styles[0]
+        inherited = result.source is not None and result.source != theme_name
+        used = " → ".join(f"{s.qualifier}/{s.name}" for s in result.styles)
+        if configs:
+            names = ", ".join(f"`{n}`" for n in configs)
+            where = (
+                f"{self.device} 기기의 기본 설정에는 opt-out 항목이 없지만, {names} 설정에서 고르는 "
+                f"스타일 체인({used})에는 opt-out 항목이 있어"
+            )
+        elif inherited:
+            where = (
+                f"{self.device} 기기가 고르는 `{own.qualifier}/{theme_name}` 스타일이 부모 스타일 "
+                f"`{result.source}`에서 opt-out 항목을 상속받아"
+            )
+        else:
+            where = f"{self.device} 기기가 고르는 `{own.qualifier}/{theme_name}` 스타일에 opt-out 항목이 있어"
+        scope = "이 설정의 " if configs else ""
+        device = f"{names} 설정의 {self.device}" if configs else self.device
+        self.add(
+            "opt_out",
+            OPT_OUT_TITLE,
             AFFECTED,
-            f"{where} 지금은 Android 16 기기에서도 시스템 바 바깥에 그려집니다. "
-            f"targetSdk가 {self.api}{particle(self.api, '이', '가')} 되면 Android 16 기기에서는 "
-            f"opt-out이 무시되어 앱이 edge-to-edge로 그려집니다. {unchanged_older}",
-            clues + ([own.clue] if inherited else []) + [day.clue],
+            f"{where} 지금은 {scope}Android 16 기기에서도 시스템 바 바깥에 그려집니다. "
+            f"targetSdk가 {josa(self.api, '이/가')} 되면 Android 16 기기에서는 "
+            f"opt-out이 무시되어 앱이 edge-to-edge로 그려집니다. {ONLY_ANDROID16}",
+            clues + [s.clue for s in result.styles] + [result.clue],
             [A16["opt_out_ignored"]],
             [
-                f"{self.device} 에뮬레이터에서 Flutter 3.32 빌드와 Flutter 3.35 빌드를 열고, "
-                "앱 화면이 상태바·내비게이션 바 뒤까지 그려지는지 비교한다."
+                f"{self.device} 에뮬레이터{'를 해당 설정(다크 모드 등)으로 바꾸고' if configs else '에서'} "
+                "Flutter 3.32 빌드와 Flutter 3.35 빌드를 열어, 앱 화면이 상태바·내비게이션 바 뒤까지 그려지는지 비교한다."
             ],
         )
         caveat, unchecked_clues = self.unchecked_caveat()
@@ -935,17 +970,17 @@ class Android16Auditor(Auditor):
             "opt_out_android16",
             f"{android_name(self.api)} 기기의 opt-out 항목",
             NEEDS_CHECK,
-            f"{self.device} 기기가 고르는 스타일 체인({used})에 opt-out 항목이 남아 있습니다(`{day.source}`). "
-            "이후 문서는 Android 16 이상에서 이 항목을 쓰면 앱이 크래시할 수 있다며, "
-            "버전별 리소스로 이 항목을 빼라고 안내합니다." + caveat,
-            [s.clue for s in day.styles] + [day.clue] + unchecked_clues,
+            f"{device} 기기가 고르는 스타일 체인({used})에 opt-out 항목이 남아 있습니다(`{result.source}`). "
+            "이후 문서는 Android 16 이상에서 이 방법으로 opt-out하면 앱이 크래시할 수 있고, "
+            "버전별 리소스로 이를 피할 수 있다고 안내합니다. Android 16 기기에서만 이 항목을 빼려면 "
+            "`values-v36`처럼 API 36 이상에 적용되는 디렉터리를 씁니다." + caveat,
+            [s.clue for s in result.styles] + [result.clue] + unchecked_clues,
             [A16["opt_out_crash"]],
             [
                 f"{self.device} 에뮬레이터에서 앱을 실행해 첫 화면까지 크래시 없이 열리는지 확인한다."
             ],
-            check="API 36 이상 기기에서 쓰이는 버전별 스타일에서 opt-out 항목을 빼는지 검토하세요.",
+            check="API 36 이상 기기에서 쓰이는 스타일에서 opt-out 항목을 빼는지 검토하세요.",
         )
-        return False
 
     def unchecked_caveat(self) -> tuple[str, list[Clue]]:
         """A sentence naming the style directories this resolver does not
@@ -963,8 +998,9 @@ class Android16Auditor(Auditor):
         for q in unchecked:
             if m := re.fullmatch(r"values-(\d+)", q):
                 caveat += (
-                    f" 플랫폼 버전 한정자는 `values-v{m[1]}`처럼 `v`를 붙여 씁니다. "
-                    f"`{q}`는 버전별 리소스로 인식되지 않습니다."
+                    f" 플랫폼 버전 한정자는 `values-v{m[1]}`처럼 `v`를 붙여 쓰므로, "
+                    f"{josa(f'`{q}`', '은/는')} 버전별 리소스로 인식되지 않습니다. "
+                    "`values-v35`는 API 35 이상 기기에, `values-v36`은 API 36 이상 기기에 적용됩니다."
                 )
         return caveat, [s.clue for s in styles if s.qualifier in unchecked][:5]
 
@@ -1015,6 +1051,22 @@ class Android16Auditor(Auditor):
                 f"{self.device} 에뮬레이터에서 지정한 색상이 상태바·내비게이션 바에 보이는지 확인한다."
             ],
         )
+
+
+def covers(smaller: dict, larger: dict) -> bool:
+    """Whether the configuration `larger` includes everything `smaller`
+    selects, so a result for `larger` shows nothing new."""
+    for k, v in smaller.items():
+        if k not in larger:
+            return False
+        # Every configuration has a screen size, and the default is
+        # `normal`, not the smallest; a smaller screen with the same
+        # style chain shows nothing new either.
+        if k == "size":
+            continue
+        if larger[k] != v and not (k in THRESHOLD_KINDS and larger[k] >= v):
+            return False
+    return True
 
 
 def auditor_class(release: Release) -> type[Auditor]:
