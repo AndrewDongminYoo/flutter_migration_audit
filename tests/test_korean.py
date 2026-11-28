@@ -114,6 +114,8 @@ def test_scan_finds_joined_and_multiline_literals():
 
 
 def test_report_text_uses_josa_after_interpolated_values():
+    """Every Korean f-string under src/fma is user-facing (report text or
+    CLI messages), so the scan covers them all on purpose."""
     offenders = [
         f"{path.name}:{line}"
         for path in sorted(SRC.glob("*.py"))

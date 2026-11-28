@@ -860,9 +860,6 @@ class Android16Auditor(Auditor):
         if day is None:
             return None
         theme_name, clues = self.theme()
-        if day.value:
-            self.lost_opt_out([(None, day)], theme_name, clues)
-            return False
         unchecked = set(unchecked_qualifiers({s.qualifier for s in self.inputs.styles}))
         configs, combos = self.variant_configs(unchecked)
         opted: dict[tuple, tuple[list[dict], OptOutResolution]] = {}
@@ -887,12 +884,17 @@ class Android16Auditor(Auditor):
                 seen.append(
                     config
                 )  # a smaller configuration may show this chain already
-        if opted:
-            self.lost_opt_out(
-                [([config_name(c) for c in cs], r) for cs, r in opted.values()],
-                theme_name,
-                clues,
+        if day.value or opted:
+            default_chain = tuple((s.qualifier, s.name) for s in day.styles)
+            groups: list[tuple[list[str] | None, OptOutResolution]] = (
+                [(None, day)] if day.value else []
             )
+            groups += [
+                ([config_name(c) for c in cs], r)
+                for (chain, _, _), (cs, r) in opted.items()
+                if not (day.value and chain == default_chain)
+            ]
+            self.lost_opt_out(groups, theme_name, clues)
             return False
         own = day.styles[0]
         used = " → ".join(f"{s.qualifier}/{s.name}" for s in day.styles)
@@ -925,11 +927,17 @@ class Android16Auditor(Auditor):
                 "opt_out",
                 OPT_OUT_TITLE,
                 NEEDS_CHECK,
-                f"{default} 이 설정은 업그레이드 전부터 edge-to-edge로 그려지고 있었습니다. "
-                + " ".join(open_parts)
-                + caveat
-                + " 확인하지 못한 설정에서 opt-out이 적용된다면, 그 설정의 Android 16 기기에서는 "
-                f"targetSdk가 {josa(self.api, '이/가')} 된 뒤 opt-out이 무시됩니다.",
+                " ".join(
+                    part
+                    for part in [
+                        f"{default} 이 설정은 업그레이드 전부터 edge-to-edge로 그려지고 있었습니다.",
+                        *open_parts,
+                        caveat.strip(),
+                        "확인하지 못한 설정에서 opt-out이 적용된다면, 그 설정의 Android 16 기기에서는 "
+                        f"targetSdk가 {josa(self.api, '이/가')} 된 뒤 opt-out이 무시됩니다.",
+                    ]
+                    if part
+                ),
                 default_clues + open_clues + unchecked_clues,
                 [A16["opt_out_ignored"]],
                 [
@@ -966,9 +974,11 @@ class Android16Auditor(Auditor):
         """Report an opt-out that Android 16 devices apply now and ignore
         after the upgrade. Each group is a style chain that opts out, with the
         device configurations that select it (None for the default)."""
-        chain_clues = [
-            c for _, r in groups for c in [*(s.clue for s in r.styles), r.clue] if c
-        ]
+        chain_clues = list(
+            dict.fromkeys(
+                c for _, r in groups for c in [*(s.clue for s in r.styles), r.clue] if c
+            )
+        )
         chains = [
             (names, " → ".join(f"{s.qualifier}/{s.name}" for s in r.styles), r)
             for names, r in groups
@@ -984,6 +994,15 @@ class Android16Auditor(Auditor):
             else:
                 where = f"{self.device} 기기가 고르는 `{own.qualifier}/{theme_name}` 스타일에 opt-out 항목이 있어 "
             now = f"{where}지금은 Android 16 기기에서도 시스템 바 바깥에 그려집니다."
+            if len(chains) > 1:
+                now += (
+                    " 다른 설정에서도 opt-out 항목이 있는 스타일 체인을 고릅니다: "
+                    + ", ".join(
+                        "·".join(f"`{n}`" for n in ns) + f"({u})"
+                        for ns, u, _ in chains[1:]
+                    )
+                    + "."
+                )
             test_where = f"{self.device} 에뮬레이터에서"
         else:
             listed = ", ".join(
@@ -1002,7 +1021,7 @@ class Android16Auditor(Auditor):
             AFFECTED,
             f"{now} targetSdk가 {josa(self.api, '이/가')} 되면 Android 16 기기에서는 "
             "opt-out이 무시되어 앱이 edge-to-edge로 그려집니다.",
-            clues + chain_clues,
+            list(dict.fromkeys(clues + chain_clues)),
             [A16["opt_out_ignored"]],
             [
                 f"{test_where} Flutter 3.32 빌드와 Flutter 3.35 빌드를 열어, "

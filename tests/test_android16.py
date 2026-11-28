@@ -295,3 +295,34 @@ def test_each_style_chain_is_named_with_its_configurations(index):
     reason = finding(report, "opt_out").reason
     assert "`values-night`(values-night/NormalTheme)" in reason
     assert "`values-en`" in reason and "(values-en/NormalTheme)" in reason
+
+
+def test_default_and_night_chains_are_both_reported(index):
+    """Subagent review: when the default style opts out, an opt-out night
+    chain is still listed, in the crash note too."""
+    night = (
+        '<resources><style name="NormalTheme" parent="NightBase"/>'
+        '<style name="NightBase" parent="@android:style/Theme.Light.NoTitleBar">'
+        '<item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>'
+        "</style></resources>"
+    )
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", xml("true")), ("values-night", night)),
+        index,
+    )
+    crash = finding(report, "opt_out_android16")
+    assert "values/NormalTheme" in crash.reason
+    assert "values-night/NormalTheme → values-night/NightBase" in crash.reason
+    assert len(crash.clues) == len(set(crash.clues))
+
+
+def test_unchecked_directory_reason_has_single_spaces(index):
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", xml(None)), ("values-xhdpi", xml("true"))),
+        index,
+    )
+    assert "  " not in finding(report, "opt_out").reason
