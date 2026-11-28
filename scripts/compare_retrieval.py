@@ -46,7 +46,7 @@ def same_text_as_gold_revision(chunks: list[Chunk], chunk: Chunk, q) -> bool:
             c
             for c in chunks
             if c.snapshot_id == q.gold_snapshot
-            and doc_path(c) == doc_path(chunk)
+            and c.doc_key == chunk.doc_key
             and c.heading == chunk.heading
         ),
         None,

@@ -21,6 +21,7 @@ import re
 import subprocess
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "data" / "raw"
@@ -66,6 +67,7 @@ INDEX_BULLET_URL = re.compile(
     r"^\s*[*-]\s+\[(.+?)\]\((/release/breaking-changes/[^)#\s]+)"
 )
 REF_DEF = re.compile(r"^\[(.+?)\]:\s*(\S+)")
+FIREBASE_CONFIGS = ("sites/docs/firebase.json", "firebase.json")
 
 
 def git(*args: str) -> str:
@@ -144,6 +146,44 @@ def parse_index(text: str) -> dict[str, str]:
             slug = url.rstrip("/").rsplit("/", 1)[-1]
             result.setdefault(slug, section)
     return result
+
+
+def url_path(url: str) -> str:
+    """The path of a site URL, without query, fragment, or trailing slash."""
+    return urlsplit(url).path.rstrip("/") or "/"
+
+
+def redirects(commit: str) -> dict[str, str]:
+    """The site's exact-path redirects (firebase.json) at a commit. Rules with
+    globs or parameters are skipped: they do not name one page."""
+    files = set(git("ls-tree", "-r", "--name-only", commit).splitlines())
+    config = next((f for f in FIREBASE_CONFIGS if f in files), None)
+    if config is None:
+        return {}
+    hosting = json.loads(git("show", f"{commit}:{config}"))["hosting"]
+    hosting = hosting[0] if isinstance(hosting, list) else hosting
+    out = {}
+    for rule in hosting.get("redirects", []):
+        src, dst = rule.get("source", ""), rule.get("destination", "")
+        if not src.startswith("/") or not dst.startswith("/"):
+            continue
+        if any(ch in src + dst for ch in "*:{}"):
+            continue
+        out[url_path(src)] = url_path(dst)
+    return out
+
+
+def doc_key(url_path: str, moves: dict[str, str]) -> str:
+    """One key for a document across snapshots: its URL path after following
+    the latest site's redirects, so a page that moved (platform-adaptations
+    moved from platform-integration/ to ui/adaptive-responsive/ in 3.27)
+    keeps its key. Only the latest redirects count: a rule an older site
+    dropped could otherwise move a page that exists again."""
+    seen = {url_path}
+    while url_path in moves and moves[url_path] not in seen:
+        url_path = moves[url_path]
+        seen.add(url_path)
+    return url_path
 
 
 def section_version(section: str | None) -> str | None:
@@ -261,10 +301,16 @@ def main() -> None:
         }
     )
 
+    moves = redirects(LATEST_SNAPSHOT[1])
+
     all_records = []
     for snap in snapshots:
         snap["commit_date"] = git("log", "-1", "--format=%cI", snap["commit"]).strip()
         records = extract(snap["snapshot_id"], snap["commit"])
+        for r in records:
+            r["doc_key"] = doc_key(
+                r["url"].removeprefix("https://docs.flutter.dev"), moves
+            )
         snap["doc_count"] = len(records)
         all_records.extend(records)
         print(

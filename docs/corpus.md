@@ -20,7 +20,7 @@ docs.flutter.dev에서 수집하는 대상은 다음과 같습니다. 전체 목
 
 Android 가이드 중 상당수(예: predictive back, splash screen, platform views)는 시스템 바와 관계가 없습니다. 일부러 넣은 문서입니다. Android 관련이라는 점만 같고 정답은 아닌 문서가 있어야 검색 방식 사이의 차이가 드러납니다.
 
-`platform-adaptations.md`는 3.27 스냅샷부터 `platform-integration/`에서 `ui/adaptive-responsive/`로 경로가 바뀌었습니다. 판본을 비교할 때 경로만으로 같은 문서를 찾으면 이 문서를 놓칩니다.
+`platform-adaptations.md`는 3.27 스냅샷부터 `platform-integration/`에서 `ui/adaptive-responsive/`로 경로가 바뀌었습니다. 그래서 매니페스트의 각 문서에 `doc_key`를 둡니다. `doc_key`는 문서의 URL 경로에서 시작해, 고정한 최신 커밋의 flutter/website 리다이렉트 설정(`firebase.json`의 301 리다이렉트)을 끝까지 따라간 경로입니다. 곧 그 문서가 지금 사이트에서 있는 곳입니다. 이전 커밋에만 있던 리다이렉트는 따르지 않습니다. 나중에 지워진 규칙을 따르면, 다시 생긴 페이지가 관계없는 키를 받을 수 있기 때문입니다. 도착 경로의 쿼리와 fragment는 버립니다. 이동한 문서의 두 경로는 같은 `doc_key`(`/ui/adaptive-responsive/platform-adaptations`)를 받으므로, 판본을 비교할 때 같은 문서로 묶입니다(`src/fma/evalset.py`). `platform-integration/android/c-interop.md`는 최신 사이트에서 수집 범위 밖의 `/platform-integration/legacy-ffi-plugin`으로 리다이렉트되므로 그 경로를 키로 받습니다. 수집한 판본끼리는 모두 같은 키라서 같은 문서로 묶입니다. API 문서는 스냅샷 사이에 경로가 바뀌지 않으므로 경로를 그대로 키로 씁니다.
 
 ## API 문서
 
