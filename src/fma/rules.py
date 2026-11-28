@@ -430,7 +430,7 @@ class Auditor:
                 + ". 이 디렉터리의 스타일이 opt-out 판단에 영향을 주는지는 확인하지 않았습니다.",
                 [s.clue for s in inp.styles if s.qualifier in unmodeled][:5],
                 tests=[
-                    "해당 한정자에 맞는 Android 15 기기나 에뮬레이터 설정(화면 크기, 밀도, 언어)에서 첫 화면 상단을 확인한다."
+                    "해당 한정자에 맞는 Android 15 기기나 에뮬레이터 설정(화면 밀도, 언어)에서 첫 화면 상단을 확인한다."
                 ],
                 check="이 디렉터리들의 스타일에서도 opt-out이 유지되는지 직접 확인하세요.",
             )
@@ -441,9 +441,18 @@ class Auditor:
                     continue  # every configuration is an API 35 device
                 values.setdefault(kind, set()).add(value)
         kinds = sorted(values)
+
+        def options(kind: str) -> list:
+            # A device is always in day or night mode, so both are checked
+            # whenever any directory uses the night qualifier, even when
+            # only values-notnight is supplied. Other kinds may be unset.
+            if kind == "night":
+                return ["notnight", "night"]
+            return [None, *sorted(values[kind], key=str)]
+
         combos = 1
         for kind in kinds:
-            combos *= len(values[kind]) + 1
+            combos *= len(options(kind))
         if combos > self.MAX_CONFIGS:
             self.add(
                 "opt_out_variant",
@@ -457,15 +466,10 @@ class Auditor:
         default = device_config("values")
         configs = [dict(default)]
         for kind in kinds:
-            options = (
-                sorted(values[kind] | {"notnight"})
-                if kind == "night"
-                else [None, *sorted(values[kind], key=str)]
-            )
             configs = [
                 c | ({kind: v} if v is not None else {})
                 for c in configs
-                for v in options
+                for v in options(kind)
             ]
         normalized: list[dict] = []
         for c in configs:

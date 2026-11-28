@@ -128,6 +128,7 @@ uv run scripts/compare_retrieval.py
 
 - [docs/corpus.md](docs/corpus.md): 문서 스냅샷 기준, 판본별 차이, 버전 메타데이터의 한계
 - [docs/retrieval-comparison.md](docs/retrieval-comparison.md): 검색 방식 비교 결과와 실패 분석
+- [docs/resource-qualifiers.md](docs/resource-qualifiers.md): opt-out을 판단할 때 리소스 한정자를 다루는 방식과 추가 확인이 필요한 경우
 
 ## 테스트
 
