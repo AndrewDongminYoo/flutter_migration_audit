@@ -70,6 +70,7 @@ def _docs() -> dict[str, dict]:
     return docs
 
 
+@cache
 def _doc_keys() -> dict[str, str]:
     return {i: d.get("doc_key") or d["path"] for i, d in _docs().items()}
 

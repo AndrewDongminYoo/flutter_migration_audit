@@ -55,3 +55,10 @@ def test_redirect_targets_keep_only_the_path():
     fetch = fetch_module()
     assert fetch.url_path("/a/b?utm_source=x#top") == "/a/b"
     assert fetch.url_path("/a/b/") == "/a/b"
+
+
+def test_the_doc_key_map_is_built_once():
+    """Codex review: question_key runs for every candidate; the map must be cached."""
+    from fma.evalset import _doc_keys
+
+    assert _doc_keys() is _doc_keys()
