@@ -3,6 +3,7 @@ AOSP
 BAAI
 capsys
 CLDR
+conftest
 endtemplate
 evalset
 fastembed
@@ -36,6 +37,7 @@ partialclonefilter
 safearea
 subtags
 systemuimode
+taplo
 testpaths
 tvdpi
 unmodeled
