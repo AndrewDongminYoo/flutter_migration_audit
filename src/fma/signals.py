@@ -428,6 +428,8 @@ class AppInputs:
     normal_theme: tuple[str, Clue] | None = None
     launch_theme: tuple[str, Clue] | None = None
     framework_theme: tuple[str, Clue] | None = None  # such as @android:style/...
+    normal_framework: tuple[str, Clue] | None = None  # meta-data naming a non-app theme
+    theme_manifest: str | None = None  # the manifest that decided the themes
     # Themes a later manifest (such as src/debug) names but the audit does not judge.
     other_themes: list[tuple[str, Clue]] = field(default_factory=list)
     styles: list[Style] = field(default_factory=list)
@@ -558,8 +560,7 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
             }
             activities.append(current)
         elif _attrs(tag).get("android:name") == NORMAL_THEME_META:
-            found = _theme_attr(text, name, tag, "android:resource")
-            theme = found[:2] if found and found[2] else None
+            theme = _theme_attr(text, name, tag, "android:resource")
             if current is not None:
                 current["normal"] = theme
             else:
@@ -579,22 +580,26 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
         normal, launch = loose, app_theme
     else:
         normal, launch = None, None
-    # The first manifest read (src/main, which read_paths puts first) sets
-    # the themes as the base source set. A later one that names other
-    # themes is only recorded.
+    if not (normal or launch):
+        return  # names no theme (such as src/profile with permissions only)
+    if inputs.theme_manifest is not None:
+        # The first manifest that names a theme (src/main, which read_paths
+        # reads first) decides them all; a later one is only recorded.
+        base_normal = inputs.normal_theme or inputs.normal_framework
+        base_launch = inputs.launch_theme or inputs.framework_theme
+        for new, base in ((normal, base_normal), (launch, base_launch)):
+            if new and (base is None or new[0] != base[0]):
+                inputs.other_themes.append(new[:2])
+        return
+    inputs.theme_manifest = name
     if normal:
-        if inputs.normal_theme is None:
-            inputs.normal_theme = normal
-        elif normal[0] != inputs.normal_theme[0]:
-            inputs.other_themes.append(normal)
+        style, clue, is_app = normal
+        inputs.normal_theme = (style, clue) if is_app else None
+        inputs.normal_framework = None if is_app else (style, clue)
     if launch:
         style, clue, is_app = launch
-        known = inputs.launch_theme or inputs.framework_theme
-        if known is None:
-            inputs.launch_theme = (style, clue) if is_app else None
-            inputs.framework_theme = None if is_app else (style, clue)
-        elif style != known[0]:
-            inputs.other_themes.append((style, clue))
+        inputs.launch_theme = (style, clue) if is_app else None
+        inputs.framework_theme = None if is_app else (style, clue)
 
 
 # --- res/values*/styles.xml -----------------------------------------------

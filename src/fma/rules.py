@@ -397,6 +397,8 @@ class Auditor:
         None when a manifest was given but names neither. Without a manifest,
         the template's NormalTheme."""
         inp = self.inputs
+        if inp.normal_framework and not inp.normal_theme:
+            return None, []  # the meta-data names a theme styles.xml cannot hold
         found = inp.normal_theme or inp.launch_theme
         if found:
             return found[0], [found[1]]
@@ -421,7 +423,7 @@ class Auditor:
             return None
         theme_name, clues = self.theme()
         if theme_name is None:
-            framework = inp.framework_theme
+            framework = inp.normal_framework or inp.framework_theme
             if framework:
                 reason = (
                     f"FlutterActivity가 앱 스타일이 아닌 `{framework[0]}` 테마를 써서, "

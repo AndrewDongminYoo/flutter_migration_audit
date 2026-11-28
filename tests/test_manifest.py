@@ -435,3 +435,32 @@ def test_unclosed_activity_ends_at_the_next_activity():
         "</activity>"
     )
     assert inputs.launch_theme[0] == "MainTheme"
+
+
+def test_framework_normal_theme_is_not_replaced_by_the_launch_theme(index):
+    """Codex review on #34."""
+    meta = f'<meta-data android:name="{META}" android:resource="@android:style/Theme.Light.NoTitleBar"/>'
+    inputs = app(ACTIVITY.format(meta), styles(LaunchTheme=True))
+    assert inputs.normal_theme is None
+    f = finding(audit("3.24.5", "3.27.1", inputs, index), "opt_out")
+    assert (
+        f.verdict == NEEDS_CHECK and "@android:style/Theme.Light.NoTitleBar" in f.reason
+    )
+
+
+def test_a_later_manifest_does_not_fill_the_base_manifest_gaps():
+    """Codex review on #34: main has no meta-data, debug adds one."""
+    inputs = AppInputs()
+    read_manifest(
+        '<activity android:name=".MainActivity" android:theme="@style/MainTheme"/>',
+        "main/AndroidManifest.xml",
+        inputs,
+    )
+    read_manifest(
+        f'<activity android:name=".MainActivity">\n<meta-data android:name="{META}" android:resource="@style/DebugTheme"/>\n</activity>',
+        "debug/AndroidManifest.xml",
+        inputs,
+    )
+    assert inputs.normal_theme is None
+    assert inputs.launch_theme[0] == "MainTheme"
+    assert [t[0] for t in inputs.other_themes] == ["DebugTheme"]
