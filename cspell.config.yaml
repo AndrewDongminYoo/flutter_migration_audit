@@ -1,0 +1,21 @@
+version: "0.2"
+useGitignore: true
+gitignoreRoot: .
+enableGlobDot: true
+ignorePaths:
+  - .git
+  - data/manifest/*.jsonl
+  - results/retrieval/results.json
+  - uv.lock
+dictionaryDefinitions:
+  - name: project_terms
+    path: ./.cspell/project_terms.txt
+    addWords: true
+dictionaries:
+  - dart
+  - filetypes
+  - flutter
+  - fonts
+  - project_terms
+  - python
+  - softwareTerms
