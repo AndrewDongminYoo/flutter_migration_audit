@@ -857,8 +857,6 @@ class Android16Auditor(Auditor):
         """Return True if the upgrade leaves the app as it was (stop), False
         if Android 16 changes it, None if unknown."""
         day = self.opt_out_state(self.api)
-        if day is None:
-            return None
         theme_name, clues = self.theme()
         unchecked = set(unchecked_qualifiers({s.qualifier for s in self.inputs.styles}))
         configs, combos = self.variant_configs(unchecked)
@@ -884,6 +882,18 @@ class Android16Auditor(Auditor):
                 seen.append(
                     config
                 )  # a smaller configuration may show this chain already
+        if day is None:
+            # The default stays "needs check"; a configuration known to opt
+            # out is still reported.
+            if opted:
+                self.lost_opt_out(
+                    [([config_name(c) for c in cs], r) for cs, r in opted.values()],
+                    theme_name,
+                    clues,
+                    key="opt_out_variant",
+                )
+                return False
+            return None
         if day.value or opted:
             default_chain = tuple((s.qualifier, s.name) for s in day.styles)
             groups: list[tuple[list[str] | None, OptOutResolution]] = (
@@ -970,6 +980,7 @@ class Android16Auditor(Auditor):
         groups: list[tuple[list[str] | None, OptOutResolution]],
         theme_name: str,
         clues: list[Clue],
+        key: str = "opt_out",
     ) -> None:
         """Report an opt-out that Android 16 devices apply now and ignore
         after the upgrade. Each group is a style chain that opts out, with the
@@ -1008,16 +1019,21 @@ class Android16Auditor(Auditor):
             listed = ", ".join(
                 "·".join(f"`{n}`" for n in ns) + f"({u})" for ns, u, _ in chains
             )
+            default = (
+                "기본 설정은 확인하지 못했지만"
+                if key != "opt_out"
+                else "기본 설정에는 opt-out 항목이 없지만"
+            )
             now = (
-                f"{self.device} 기기의 기본 설정에는 opt-out 항목이 없지만, 다음 설정에서 고르는 스타일 체인에는 "
+                f"{self.device} 기기의 {default}, 다음 설정에서 고르는 스타일 체인에는 "
                 f"opt-out 항목이 있습니다: {listed}. 지금은 이 설정의 Android 16 기기에서도 시스템 바 바깥에 그려집니다."
             )
             test_where = (
                 f"{self.device} 에뮬레이터를 해당 설정(다크 모드 등)으로 바꾸고"
             )
         self.add(
-            "opt_out",
-            OPT_OUT_TITLE,
+            key,
+            OPT_OUT_TITLE if key == "opt_out" else "다른 기기 설정의 opt-out",
             AFFECTED,
             f"{now} targetSdk가 {josa(self.api, '이/가')} 되면 Android 16 기기에서는 "
             "opt-out이 무시되어 앱이 edge-to-edge로 그려집니다.",

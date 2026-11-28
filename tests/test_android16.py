@@ -326,3 +326,20 @@ def test_unchecked_directory_reason_has_single_spaces(index):
         index,
     )
     assert "  " not in finding(report, "opt_out").reason
+
+
+def test_known_night_opt_out_is_reported_when_the_default_is_unknown(index):
+    """Codex review on #32: an unresolved default does not hide a night
+    style that opts out."""
+    report = audit(
+        "3.32.5",
+        "3.35.1",
+        inputs(("values", MISSING_PARENT), ("values-night", xml("true"))),
+        index,
+    )
+    assert finding(report, "opt_out").verdict == NEEDS_CHECK
+    f = finding(report, "opt_out_variant")
+    assert f.verdict == AFFECTED and "`values-night`" in f.reason
+    assert "기본 설정은 확인하지 못했지만" in f.reason
+    assert finding(report, "opt_out_android16").verdict == NEEDS_CHECK
+    assert "layout" in [x.key for x in report.findings]
