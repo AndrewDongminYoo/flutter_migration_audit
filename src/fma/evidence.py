@@ -51,10 +51,8 @@ class Evidence:
     rank: int  # 1-based rank of the accepted chunk among the candidates
 
     def source_label(self) -> str:
-        version = {
-            "flutter-3.24": "Flutter 3.24 문서",
-            "flutter-3.27": "Flutter 3.27 문서",
-        }.get(self.snapshot_id, "현재 문서")
+        m = re.fullmatch(r"flutter-(\d+\.\d+)", self.snapshot_id)
+        version = f"Flutter {m.group(1)} 문서" if m else "현재 문서"
         repo = (
             "flutter/flutter"
             if not re.fullmatch(r"[0-9a-f]{40}", self.revision)

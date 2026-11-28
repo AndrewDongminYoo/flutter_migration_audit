@@ -132,8 +132,9 @@ PRECEDENCE = [
     "nav",
     "version",
 ]
-# The audit looks at Android 15 devices, so every configuration it resolves
-# runs API 35. Directories for later versions (values-v36) never apply.
+# Default device API for a configuration. The audit passes the API of the
+# device it checks; directories for later versions (values-v36 on an API 35
+# device) never apply.
 DEVICE_API = 35
 
 
@@ -264,12 +265,13 @@ def unchecked_qualifiers(qualifiers: set[str]) -> dict[str, set[str]]:
     return {q: reasons for q, reasons in out.items() if reasons}
 
 
-def device_config(qualifier: str) -> dict[str, str | int]:
-    """The API 35 device configuration that `qualifier` describes. A device is
-    always in day or night mode, so an unspecified mode means `notnight`, and
-    always has a screen size, so an unspecified size means `normal`."""
+def device_config(qualifier: str, api: int = DEVICE_API) -> dict[str, str | int]:
+    """The device configuration that `qualifier` describes, on a device that
+    runs `api`. A device is always in day or night mode, so an unspecified
+    mode means `notnight`, and always has a screen size, so an unspecified
+    size means `normal`."""
     config = qualifier_parts(qualifier)
-    config["version"] = DEVICE_API
+    config["version"] = api
     config.setdefault("night", "notnight")
     config.setdefault("size", NORMAL_SIZE)
     return config
@@ -370,17 +372,17 @@ def best_match(qualifiers: set[str], config: dict) -> str | None:
 
 
 def resolve_opt_out(
-    styles: list[Style], name: str, qualifier: str | dict
+    styles: list[Style], name: str, qualifier: str | dict, api: int = DEVICE_API
 ) -> OptOutResolution | None:
     """Follow the style's parents until one sets the opt-out item.
 
     `qualifier` names the device configuration to resolve for, such as
-    `values` (default), `values-night`, or `values-zh-night`, on an API 35
-    device. Each style in the chain, parents included, is taken from its own
+    `values` (default), `values-night`, or `values-zh-night`, on a device that
+    runs `api`; a dict is a complete configuration. Each style in the chain, parents included, is taken from its own
     best-matching resource directory, as Android does. Returns None if the
     requested style itself is not provided.
     """
-    config = device_config(qualifier) if isinstance(qualifier, str) else qualifier
+    config = device_config(qualifier, api) if isinstance(qualifier, str) else qualifier
 
     def find(n: str) -> Style | None:
         defined = {s.qualifier for s in styles if s.name == n}
