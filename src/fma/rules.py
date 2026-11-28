@@ -1,4 +1,4 @@
-"""Audit rules for Android system bars and edge-to-edge (Flutter 3.24 → 3.27).
+"""Audit rules for Android system bars and edge-to-edge across a Flutter upgrade.
 
 Each rule reads app clues, picks a verdict, and names the doc evidence that
 backs it. If the evidence cannot be found in the right version of the docs,
@@ -23,7 +23,7 @@ from .signals import (
     resolve_opt_out,
     unchecked_qualifiers,
 )
-from .versions import Release, check_range
+from .versions import EDGE_TO_EDGE_API, Release, android_name, check_range
 
 AFFECTED, NOT_AFFECTED, NEEDS_CHECK = "affected", "not_affected", "needs_check"
 LABELS = {
@@ -190,7 +190,9 @@ class Auditor:
                 or "근거 문서를 찾지 못했습니다. 판단 전에 공식 문서를 직접 확인하세요."
             )
         if self.conditional and finding.verdict != NEEDS_CHECK:
-            finding.reason = "targetSdk가 35가 된다면: " + finding.reason
+            finding.reason = (
+                f"targetSdk가 {self.tgt.default_target_sdk}가 된다면: " + finding.reason
+            )
             finding.verdict = NEEDS_CHECK
             finding.check = finding.check or "targetSdk 값을 먼저 확인하세요."
         self.findings.append(finding)
@@ -199,7 +201,7 @@ class Auditor:
     # -- rules -------------------------------------------------------------
 
     def target_sdk(self) -> bool:
-        """Return True if later rules apply (target becomes >= 35 or unknown)."""
+        """Return True if later rules apply (target reaches EDGE_TO_EDGE_API or is unknown)."""
         inp, cur, tgt = (
             self.inputs,
             self.cur.default_target_sdk,
@@ -208,7 +210,7 @@ class Auditor:
         ts = inp.target_sdk
         title = "targetSdk 변화"
         compare = (
-            f"Android 15(API 35) 에뮬레이터에서 {self.cur_label} 빌드와 {self.tgt_label} "
+            f"{self.device} 에뮬레이터에서 {self.cur_label} 빌드와 {self.tgt_label} "
             "빌드의 첫 화면을 열고 상단 상태바·하단 내비게이션 바 주변을 비교한다."
         )
         if not inp.gradle_provided or ts is None:
@@ -232,38 +234,38 @@ class Auditor:
                 "target_sdk",
                 title,
                 AFFECTED,
-                f"targetSdk가 flutter.targetSdkVersion을 따르므로 API {cur}에서 API {tgt}(Android 15)로 바뀝니다.",
+                f"targetSdk가 flutter.targetSdkVersion을 따르므로 API {cur}에서 API {tgt}({android_name(tgt)})로 바뀝니다.",
                 [ts.clue],
                 [E["target_default"]],
                 [compare],
             )
             return True
-        if ts.explicit is not None and ts.explicit < 35:
+        if ts.explicit is not None and ts.explicit < EDGE_TO_EDGE_API:
             self.add(
                 "target_sdk",
                 title,
                 NOT_AFFECTED,
                 f"targetSdk를 {ts.explicit}로 직접 지정해서 이번 업그레이드로는 바뀌지 않습니다. "
-                "35로 올리는 시점에 같은 영향이 생깁니다.",
+                f"{EDGE_TO_EDGE_API}로 올리는 시점에 같은 영향이 생깁니다.",
                 [ts.clue],
                 [E["target_explicit"]],
             )
             self.notes.append(
-                "targetSdk가 35 미만으로 고정되어 있어 시스템 바 관련 나머지 항목은 확인하지 않았습니다."
+                f"targetSdk가 {EDGE_TO_EDGE_API} 미만으로 고정되어 있어 시스템 바 관련 나머지 항목은 확인하지 않았습니다."
             )
             return False
-        if ts.explicit is not None and ts.explicit == 35:
+        if ts.explicit is not None and ts.explicit == tgt:
             self.add(
                 "target_sdk",
                 title,
                 NOT_AFFECTED,
-                "이미 targetSdk 35를 직접 지정하고 있어 Flutter 버전과 관계없이 edge-to-edge가 적용되던 상태입니다. "
+                f"이미 targetSdk {tgt}를 직접 지정하고 있어 Flutter 버전과 관계없이 edge-to-edge가 적용되던 상태입니다. "
                 "이번 업그레이드로 바뀌는 것은 없습니다.",
                 [ts.clue],
                 [E["edge_default"]],
             )
             self.notes.append(
-                "업그레이드 전부터 targetSdk 35였으므로 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
+                f"업그레이드 전부터 targetSdk {tgt}였으므로 나머지 항목은 이번 업그레이드의 영향으로 보지 않았습니다."
             )
             return False
         if ts.explicit is not None:
@@ -271,10 +273,10 @@ class Auditor:
                 "target_sdk",
                 title,
                 NEEDS_CHECK,
-                f"targetSdk {ts.explicit}는 이번 구간 문서(Flutter 3.27 기준 Android 15)가 다루지 않는 값입니다.",
+                f"targetSdk {ts.explicit}는 이번 구간 문서({self.tgt_label} 기준 {android_name(tgt)})가 다루지 않는 값입니다.",
                 [ts.clue],
-                check="Android 16 이상을 대상으로 할 때의 동작은 이 구간 문서로 판단할 수 없습니다. "
-                "Android 16 동작 변경 문서를 직접 확인하세요.",
+                check=f"{android_name(tgt + 1)} 이상을 대상으로 할 때의 동작은 이 구간 문서로 판단할 수 없습니다. "
+                f"{android_name(tgt + 1)} 동작 변경 문서를 직접 확인하세요.",
             )
             return False
         self.add(
@@ -306,7 +308,7 @@ class Auditor:
             return None
         theme_name, theme_clue = inp.normal_theme or ("NormalTheme", None)
         clues = [theme_clue] if theme_clue else []
-        day = resolve_opt_out(inp.styles, theme_name, "values")
+        day = resolve_opt_out(inp.styles, theme_name, "values", self.api)
         if day is None:
             self.add(
                 "opt_out",
@@ -337,12 +339,12 @@ class Auditor:
                 "opt_out",
                 title,
                 NOT_AFFECTED,
-                f"{where} Android 15 기기에서도 기존처럼 시스템 바 바깥에 그려집니다. "
+                f"{where} {self.android} 기기에서도 기존처럼 시스템 바 바깥에 그려집니다. "
                 "다만 문서는 이 방법을 임시 조치로 안내합니다." + caveat,
                 clues + ([own.clue] if inherited else []) + [day.clue],
                 specs,
                 [
-                    "Android 15(API 35) 에뮬레이터에서 첫 화면 상단 콘텐츠가 상태바 아래로 들어가지 않는지 확인한다."
+                    f"{self.device} 에뮬레이터에서 첫 화면 상단 콘텐츠가 상태바 아래로 들어가지 않는지 확인한다."
                 ],
             )
             if self.opt_out_variants(theme_name):
@@ -378,13 +380,13 @@ class Auditor:
             reason = (
                 "opt-out 항목이 `false`로 설정되어 있어"
                 + (f"(`{day.source}`에서 상속)" if inherited else "")
-                + " Android 15 이상 기기에서 앱이 edge-to-edge로 그려집니다."
+                + f" {android_name(EDGE_TO_EDGE_API)} 이상 기기에서 앱이 edge-to-edge로 그려집니다."
             )
             extra = [day.clue]
         else:
             reason = (
                 f"`{theme_name}`과 그 부모 스타일에 opt-out 항목이 없어 "
-                "Android 15 이상 기기에서 앱이 edge-to-edge로 그려집니다."
+                f"{android_name(EDGE_TO_EDGE_API)} 이상 기기에서 앱이 edge-to-edge로 그려집니다."
             )
             extra = []
         self.add(
@@ -395,7 +397,7 @@ class Auditor:
             clues + [own.clue] + extra,
             [E["edge_default"]],
             [
-                "Android 15(API 35) 에뮬레이터에서 앱 화면이 상태바·내비게이션 바 뒤까지 그려지는지 확인한다."
+                f"{self.device} 에뮬레이터에서 앱 화면이 상태바·내비게이션 바 뒤까지 그려지는지 확인한다."
             ],
         )
         return False
@@ -405,7 +407,7 @@ class Auditor:
     def opt_out_variants(self, theme_name: str) -> bool:
         """Check the other device configurations the supplied resources can produce.
 
-        The default result covers a day-mode API 35 device. Android resolves
+        The default result covers a day-mode device that runs `self.api`. Android resolves
         each style in the chain separately, so qualified variants of different
         ancestors can combine (values-en/NormalTheme with values-night/Base
         gives an English night-mode result neither directory shows alone).
@@ -429,7 +431,7 @@ class Auditor:
                 + ". 이 디렉터리의 스타일이 opt-out 판단에 영향을 주는지는 확인하지 않았습니다.",
                 [s.clue for s in inp.styles if s.qualifier in unmodeled][:5],
                 tests=[
-                    "해당 한정자에 맞는 Android 15 기기나 에뮬레이터 설정(화면 밀도, 언어)에서 첫 화면 상단을 확인한다."
+                    f"해당 한정자에 맞는 {self.android} 기기나 에뮬레이터 설정(화면 밀도, 언어)에서 첫 화면 상단을 확인한다."
                 ],
                 check="이 디렉터리들의 스타일에서도 opt-out이 유지되는지 직접 확인하세요.",
             )
@@ -437,7 +439,7 @@ class Auditor:
         for q in {s.qualifier for s in inp.styles} - set(unmodeled):
             for kind, value in qualifier_parts(q).items():
                 if kind == "version":
-                    continue  # every configuration is an API 35 device
+                    continue  # every configuration runs the audited device API
                 values.setdefault(kind, set()).add(value)
         kinds = sorted(values)
 
@@ -462,7 +464,7 @@ class Auditor:
                 check="언어·다크 모드·화면 크기 등 한정자별로 opt-out이 유지되는지 직접 확인하세요.",
             )
             return True
-        default = device_config("values")
+        default = device_config("values", self.api)
         configs = [dict(default)]
         for kind in kinds:
             configs = [
@@ -523,11 +525,11 @@ class Auditor:
                     "다크 모드 스타일의 opt-out",
                     NEEDS_CHECK,
                     f"`{name}` 설정에서 Android가 고르는 스타일 체인({used})에서 {detail}. "
-                    "Flutter 3.27 시점 문서는 다크 모드 스타일을 언급하지 않았고, 이후 문서에서 같은 항목을 넣으라는 안내가 추가됐습니다.",
+                    f"{self.tgt_label} 시점 문서는 다크 모드 스타일을 언급하지 않았고, 이후 문서에서 같은 항목을 넣으라는 안내가 추가됐습니다.",
                     clues,
                     [E["opt_out_night"]],
                     [
-                        "기기를 다크 모드로 바꾸고 Android 15 에뮬레이터에서 첫 화면 상단을 다시 확인한다."
+                        f"기기를 다크 모드로 바꾸고 {self.android} 에뮬레이터에서 첫 화면 상단을 다시 확인한다."
                     ],
                     check="다크 모드에서도 opt-out이 필요한지 확인하세요.",
                 )
@@ -537,10 +539,10 @@ class Auditor:
                     f"`{name}` 설정의 opt-out",
                     NEEDS_CHECK,
                     f"기본 설정에서는 opt-out이 적용되지만, `{name}` 설정에서 Android가 고르는 스타일 체인({used})에서 {detail}. "
-                    "Flutter 3.27 문서는 이런 리소스 변형을 다루지 않으므로 기기에서 직접 확인해야 합니다.",
+                    f"{self.tgt_label} 문서는 이런 리소스 변형을 다루지 않으므로 기기에서 직접 확인해야 합니다.",
                     clues,
                     tests=[
-                        f"Android 15 에뮬레이터를 `{name}`에 해당하는 설정으로 바꾸고 첫 화면 상단을 다시 확인한다."
+                        f"{self.android} 에뮬레이터를 `{name}`에 해당하는 설정으로 바꾸고 첫 화면 상단을 다시 확인한다."
                     ],
                     check=f"`{name}` 설정에서도 opt-out이 필요한지 확인하세요.",
                 )
@@ -587,11 +589,11 @@ class Auditor:
                     f"ui_mode_{mode}",
                     f"{title}: {mode}",
                     AFFECTED,
-                    f"SystemUiMode.{mode} 모드는 targetSdk 35 이상에서 opt-out 없이는 동작하지 않습니다.",
+                    f"SystemUiMode.{mode} 모드는 targetSdk {EDGE_TO_EDGE_API} 이상에서 opt-out 없이는 동작하지 않습니다.",
                     clues,
                     [mode_spec(mode)],
                     [
-                        f"Android 15(API 35) 에뮬레이터에서 {mode} 모드를 켜는 화면에 들어가 상태바·내비게이션 바가 문서대로 숨는지 확인한다."
+                        f"{self.device} 에뮬레이터에서 {mode} 모드를 켜는 화면에 들어가 상태바·내비게이션 바가 문서대로 숨는지 확인한다."
                     ],
                 )
 
@@ -619,7 +621,7 @@ class Auditor:
             )
             return
         tests = [
-            "Android 15(API 35) 에뮬레이터에서 화면 맨 위 텍스트·버튼이 상태바와 겹치지 않는지, "
+            f"{self.device} 에뮬레이터에서 화면 맨 위 텍스트·버튼이 상태바와 겹치지 않는지, "
             "맨 아래 버튼이 내비게이션 바(3버튼·제스처 모두)와 겹치지 않는지 확인한다."
         ]
         if inp.safe_areas:
@@ -671,11 +673,11 @@ class Auditor:
             "overlay_colors",
             "상태바·내비게이션 바 색상 지정",
             NEEDS_CHECK,
-            "시스템 바 색상을 직접 지정하고 있습니다. Flutter 3.27 문서에는 edge-to-edge에서 이 색상이 어떻게 적용되는지 적혀 있지 않습니다.",
+            f"시스템 바 색상을 직접 지정하고 있습니다. {self.tgt_label} 문서에는 edge-to-edge에서 이 색상이 어떻게 적용되는지 적혀 있지 않습니다.",
             self.inputs.overlay_colors,
             [E["overlay_color_edge"]],
             [
-                "Android 15(API 35) 에뮬레이터에서 지정한 색상이 상태바·내비게이션 바에 그대로 보이는지 확인한다."
+                f"{self.device} 에뮬레이터에서 지정한 색상이 상태바·내비게이션 바에 그대로 보이는지 확인한다."
             ],
             check="문서로 판단할 수 없어 기기에서 직접 확인해야 합니다.",
         )
@@ -685,11 +687,24 @@ class Auditor:
 
     @property
     def cur_label(self) -> str:
-        return f"Flutter {self.cur.minor[0]}.{self.cur.minor[1]}"
+        return self.cur.label
 
     @property
     def tgt_label(self) -> str:
-        return f"Flutter {self.tgt.minor[0]}.{self.tgt.minor[1]}"
+        return self.tgt.label
+
+    @property
+    def api(self) -> int:
+        """API level of the device the audit checks: the target's default."""
+        return self.tgt.default_target_sdk
+
+    @property
+    def android(self) -> str:
+        return android_name(self.api)
+
+    @property
+    def device(self) -> str:
+        return f"{self.android}(API {self.api})"
 
     def run(self) -> None:
         if not self.target_sdk():

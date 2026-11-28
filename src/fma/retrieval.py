@@ -41,14 +41,14 @@ def cli_scope() -> set[tuple[str, str | None]]:
     """
     from .evidence import required_snapshot
     from .rules import E, mode_spec
-    from .versions import RELEASES, SUPPORTED_RANGE
+    from .versions import target_releases
 
-    target = RELEASES[SUPPORTED_RANGE[1]]
     scope: set[tuple[str, str | None]] = set()
-    for spec in [*E.values(), *(mode_spec(m) for m in UI_MODES)]:
-        snapshot = required_snapshot(spec, target)
-        for kind in spec.kinds or [None]:
-            scope.add((snapshot, kind))
+    for target in target_releases():
+        for spec in [*E.values(), *(mode_spec(m) for m in UI_MODES)]:
+            snapshot = required_snapshot(spec, target)
+            for kind in spec.kinds or [None]:
+                scope.add((snapshot, kind))
     return scope
 
 

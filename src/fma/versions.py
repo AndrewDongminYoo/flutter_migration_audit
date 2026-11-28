@@ -7,6 +7,10 @@ from dataclasses import dataclass
 
 VERSION = re.compile(r"^(\d+)\.(\d+)(?:\.(\d+))?(?:[-+].*)?$")
 
+# Android enforces edge-to-edge for apps that target this API level or later.
+EDGE_TO_EDGE_API = 35
+ANDROID_VERSIONS = {34: "Android 14", 35: "Android 15", 36: "Android 16"}
+
 
 class UnsupportedVersion(ValueError):
     pass
@@ -21,12 +25,33 @@ class Release:
     # ("Prior to Flutter 3.27, Flutter apps target Android 14 by default").
     default_target_sdk: int
 
+    @property
+    def label(self) -> str:
+        return f"Flutter {self.minor[0]}.{self.minor[1]}"
+
 
 RELEASES = {
     (3, 24): Release((3, 24), "flutter-3.24", 34),
     (3, 27): Release((3, 27), "flutter-3.27", 35),
 }
-SUPPORTED_RANGE = ((3, 24), (3, 27))
+# Upgrades the audit supports, as (current minor, target minor). Each range
+# changes the default targetSdk; its evidence comes from the docs snapshot of
+# the target release.
+SUPPORTED_RANGES = (((3, 24), (3, 27)),)
+
+
+def android_name(api: int) -> str:
+    return ANDROID_VERSIONS.get(api, f"API {api}")
+
+
+def target_releases() -> list[Release]:
+    """The releases that some supported upgrade targets."""
+    return [RELEASES[target] for _, target in SUPPORTED_RANGES]
+
+
+def range_text(minors: tuple[tuple[int, int], tuple[int, int]]) -> str:
+    (a, b), (c, d) = minors
+    return f"{a}.{b}.x → {c}.{d}.x"
 
 
 def parse(version: str) -> tuple[int, int, int]:
@@ -49,9 +74,10 @@ def release_for(version: str) -> Release:
 
 def check_range(current: str, target: str) -> tuple[Release, Release]:
     cur, tgt = release_for(current), release_for(target)
-    if (cur.minor, tgt.minor) != SUPPORTED_RANGE:
+    if (cur.minor, tgt.minor) not in SUPPORTED_RANGES:
         raise UnsupportedVersion(
-            "첫 버전은 Flutter 3.24.x → 3.27.x 구간만 분석합니다. "
-            f"입력: {current} → {target}"
+            "첫 버전은 Flutter "
+            + ", ".join(range_text(r) for r in SUPPORTED_RANGES)
+            + f" 구간만 분석합니다. 입력: {current} → {target}"
         )
     return cur, tgt

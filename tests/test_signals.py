@@ -138,3 +138,71 @@ def test_version_range():
     ]:
         with pytest.raises(UnsupportedVersion):
             check_range(a, b)
+
+
+# --- upgrade ranges (issue #18) ------------------------------------------
+
+
+@pytest.fixture
+def extra_range(monkeypatch):
+    """A second supported range, 3.27 → 3.29 with targetSdk 36. The real
+    second range lands with its docs snapshot; this checks the plumbing."""
+    from fma import versions
+
+    fake = versions.Release((3, 29), "flutter-3.29", 36)
+    monkeypatch.setitem(versions.RELEASES, (3, 29), fake)
+    monkeypatch.setattr(
+        versions, "SUPPORTED_RANGES", (*versions.SUPPORTED_RANGES, ((3, 27), (3, 29)))
+    )
+    return fake
+
+
+def test_every_supported_range_is_accepted(extra_range):
+    from fma.versions import target_releases
+
+    assert check_range("3.27.1", "3.29.0")[1] == extra_range
+    assert check_range("3.24.5", "3.27.1")[1].snapshot_id == "flutter-3.27"
+    assert [r.snapshot_id for r in target_releases()] == [
+        "flutter-3.27",
+        "flutter-3.29",
+    ]
+    with pytest.raises(UnsupportedVersion) as e:
+        check_range("3.24.0", "3.29.0")  # skipping a range is not supported
+    assert "3.24.x → 3.27.x, 3.27.x → 3.29.x" in str(e.value)
+
+
+def test_cli_scope_covers_every_target_release(extra_range):
+    from fma.retrieval import cli_scope
+
+    snapshots = {s for s, _ in cli_scope()}
+    assert {"flutter-3.27", "flutter-3.29"} <= snapshots
+
+
+def test_device_api_selects_version_directories():
+    from fma.signals import best_match, device_config
+
+    dirs = {"values", "values-v35", "values-v36"}
+    assert best_match(dirs, device_config("values", 35)) == "values-v35"
+    assert best_match(dirs, device_config("values", 36)) == "values-v36"
+
+
+def test_evidence_label_names_any_release_snapshot():
+    from fma.evidence import Evidence
+
+    ev = Evidence("k", "q", "t", "h", "u", "flutter-3.35", "3.35.0", False, 1)
+    assert ev.source_label() == "Flutter 3.35 문서 (flutter/flutter 3.35.0)"
+
+
+def test_report_text_follows_the_target_release(extra_range, index):
+    from fma.rules import audit
+    from fma.signals import AppInputs
+
+    inputs = AppInputs()
+    read_gradle("targetSdk = flutter.targetSdkVersion", "build.gradle", inputs)
+    f = audit("3.27.0", "3.29.0", inputs, index).findings[0]
+    # Korean particles after the number change in the range that adds API 36.
+    assert "API 35에서 API 36(Android 16)" in f.reason
+    assert (
+        "Android 16(API 36) 에뮬레이터에서 Flutter 3.27 빌드와 Flutter 3.29"
+        in f.tests[0]
+    )
