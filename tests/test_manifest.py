@@ -541,3 +541,28 @@ def test_explicit_manifests_outside_src_main_keep_the_given_order(tmp_path):
         ]
     )
     assert inputs.normal_theme[0] == "BaseTheme"
+
+
+def test_a_checkout_named_main_is_not_the_main_source_set(tmp_path):
+    """Codex review on #34."""
+    from fma.signals import discover
+
+    root = tmp_path / "main" / "app"
+    for variant, theme in (("main", "MainTheme"), ("debug", "DebugTheme")):
+        d = root / "android/app/src" / variant
+        d.mkdir(parents=True)
+        (d / "AndroidManifest.xml").write_text(
+            f'<activity android:name=".MainActivity">\n<meta-data android:name="{META}" android:resource="@style/{theme}"/>\n</activity>'
+        )
+    assert discover(root).normal_theme[0] == "MainTheme"
+
+
+def test_meta_data_right_after_the_activity_end_is_outside_it():
+    """Codex review on #34."""
+    inputs = read(
+        "<application>"
+        f'<activity android:name=".MainActivity"><meta-data android:name="{META}" android:resource="@style/Actual"/></activity>'
+        f'<meta-data android:name="{META}" android:resource="@style/Ignored"/>'
+        "</application>"
+    )
+    assert inputs.normal_theme[0] == "Actual"

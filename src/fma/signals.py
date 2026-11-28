@@ -550,7 +550,7 @@ def read_manifest(text: str, name: str, inputs: AppInputs) -> None:
         if MERGE_DIRECTIVE.search(tag.group(2)):
             line = text.count("\n", 0, tag.start()) + 1
             directives.append(Clue(name, line, text.splitlines()[line - 1]))
-        if current is not None and tag.start() > end:
+        if current is not None and tag.start() >= end:  # end is exclusive
             current = None
         if kind == "application":
             app_theme = _theme_attr(text, name, tag, "android:theme")
@@ -793,7 +793,11 @@ def read_paths(paths: list[Path], root: Path | None = None) -> AppInputs:
         # src/main's manifest first: build-type manifests (src/debug,
         # src/profile) only add to the base source set; they do not decide
         # the audited theme. Other manifests keep the order they were given.
-        if path.name == "AndroidManifest.xml" and "main" not in path.parts:
+        parts = path.parts
+        in_main = any(
+            parts[i : i + 2] == ("src", "main") for i in range(len(parts) - 1)
+        )
+        if path.name == "AndroidManifest.xml" and not in_main:
             return (1, given[path], path)
         return (0, 0, path)  # Path order compares parts: values before values-night
 
