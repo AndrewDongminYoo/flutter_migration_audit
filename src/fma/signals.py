@@ -105,7 +105,7 @@ QUALIFIER_KINDS: list[tuple[str, re.Pattern]] = [
         ("navexp", r"navexposed|navhidden"),
         ("nav", r"nonav|dpad|trackball|wheel"),
         ("version", r"v\d+"),
-        ("locale", r"[a-z]{2,3}|r[A-Z]{2}|b\+[\w+]+"),
+        ("locale", r"[a-z]{2,3}|r[a-z]{2}|b\+[\w+]+"),
     ]
 ]
 PRECEDENCE = [
@@ -195,25 +195,57 @@ def locale_qualifier(value: str) -> str:
 
 
 def qualifier_parts(qualifier: str) -> dict[str, str | int]:
-    """Parse `values-zh-rCN-night-v35` into {"locale": "zh-rCN", "night": "night", "version": 35}."""
+    """Parse `values-zh-rCN-night-v35` into {"locale": "zh-rCN", "night": "night", "version": 35}.
+
+    Android ignores the case of qualifier values (it lowercases the
+    directory name), so tokens are compared in lowercase. A legacy region
+    (`rUS`) is told from a three-letter language (`rus`) by position: it
+    follows a language token."""
     parts: dict[str, str | int] = {}
+    after_language = False
     for token in qualifier.split("-")[1:]:
+        low = token.lower()
+        follows_language, after_language = after_language, False
         for kind, pattern in QUALIFIER_KINDS:
-            if pattern.fullmatch(token):
-                if kind == "size":
-                    parts[kind] = SCREEN_SIZES[token]
-                elif kind in THRESHOLD_KINDS:
-                    parts[kind] = int(re.sub(r"\D", "", token))
-                elif kind == "locale" and "locale" in parts:
-                    parts[kind] = f"{parts[kind]}-{token}"
+            if not pattern.fullmatch(low):
+                continue
+            if kind == "locale":
+                if low.startswith("b+"):
+                    # canonical_locale fixes the case of each subtag.
+                    parts[kind] = "b+" + token[2:]
+                elif follows_language and re.fullmatch(r"r[a-z]{2}", low):
+                    parts[kind] = f"{parts[kind]}-r{low[1:].upper()}"
+                elif "locale" not in parts and re.fullmatch(r"[a-z]{2,3}", low):
+                    parts[kind] = low
+                    after_language = True
                 else:
-                    parts[kind] = token
-                break
+                    continue
+            elif kind == "size":
+                parts[kind] = SCREEN_SIZES[low]
+            elif kind in THRESHOLD_KINDS:
+                parts[kind] = int(re.sub(r"\D", "", low))
+            else:
+                parts[kind] = low
+            break
         else:
             parts[f"unknown:{token}"] = token
     if isinstance(parts.get("locale"), str):
         parts["locale"] = canonical_locale(parts["locale"])
     return parts
+
+
+# Languages Android treats as one (langsAreEquivalent in AOSP's
+# ResourceTypes.cpp): a fil device uses values-tl, and the reverse.
+EQUIVALENT_LANGUAGES = [{"fil", "tl"}]
+
+
+def language_key(lang: str) -> str:
+    """One code for a group of equivalent languages (`tl` becomes `fil`)."""
+    return next((min(g) for g in EQUIVALENT_LANGUAGES if lang in g), lang)
+
+
+def same_language(a: str, b: str) -> bool:
+    return language_key(a) == language_key(b)
 
 
 # Qualifiers whose Android matching this resolver does not model. Density
@@ -257,7 +289,7 @@ def unchecked_qualifiers(qualifiers: set[str]) -> dict[str, set[str]]:
             continue
         lang, _, region = locale_parts(locale)
         if region is not None:
-            regional.setdefault(lang, {})[q] = region
+            regional.setdefault(language_key(lang), {})[q] = region
     for dirs in regional.values():
         if len(set(dirs.values())) > 1:
             for q in dirs:
@@ -329,7 +361,7 @@ def _matches(directory: dict, config: dict) -> bool:
             w_lang, w_script, w_region = locale_parts(want)
             # A part the directory leaves out matches any device value.
             if (
-                lang != w_lang
+                not same_language(lang, w_lang)
                 or script not in (None, w_script)
                 or region not in (None, w_region)
             ):
@@ -361,7 +393,15 @@ def best_match(qualifiers: set[str], config: dict) -> str | None:
             top = max(d[kind] for _, d in with_kind)
             with_kind = [(q, d) for q, d in with_kind if d[kind] == top]
         elif kind == "locale":
-            # All remaining locales match; the most specific one wins.
+            # All remaining locales match. Among equivalent languages the
+            # device's own code wins (isLocaleBetterThan in AOSP), then the
+            # most specific locale.
+            want = locale_parts(str(config.get("locale")))[0]
+            exact = [
+                (q, d) for q, d in with_kind if locale_parts(d["locale"])[0] == want
+            ]
+            with_kind = exact or with_kind
+
             def specificity(d: dict) -> int:
                 return sum(x is not None for x in locale_parts(d["locale"])[1:])
 
