@@ -151,3 +151,17 @@ def test_variant_only_styles_say_main_styles_are_missing(tmp_path, index):
     )
     f = finding(audit("3.24.5", "3.27.1", inputs, index), "opt_out")
     assert f.verdict == NEEDS_CHECK and "src/main" in f.reason
+
+
+def test_variant_in_a_qualifier_main_lacks_is_noted(tmp_path, index):
+    """Codex review on #36: src/debug/res/values-land redefines NormalTheme."""
+    root = project(tmp_path)
+    main = (root / "android/app/src/main/res/values/styles.xml").read_text()
+    tag = '<style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">'
+    d = root / "android/app/src/debug/res/values-land"
+    d.mkdir(parents=True)
+    (d / "styles.xml").write_text(main.replace(tag, tag + OPT_OUT))
+    report = audit("3.24.5", "3.27.1", discover(root), index)
+    assert any(
+        "values-land/styles.xml" in n and "`NormalTheme`" in n for n in report.notes
+    )

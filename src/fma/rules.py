@@ -473,10 +473,11 @@ class Auditor:
         judged = {
             (st.qualifier, st.name): (st.opt_out_raw, st.parent) for st in inp.styles
         }
+        names = {st.name for st in inp.styles}
         for st in inp.variant_styles:
             key = (st.qualifier, st.name)
-            if key not in judged or judged[key] == (st.opt_out_raw, st.parent):
-                continue  # a new style, or the same opt-out and parent
+            if st.name not in names or judged.get(key) == (st.opt_out_raw, st.parent):
+                continue  # a style main lacks, or the same opt-out and parent
             note = (
                 f"`{st.clue.file}`의 {st.clue.line}행은 빌드 유형별 소스 세트에서 `{st.name}` 스타일을 "
                 "다르게 정의합니다. opt-out은 기본 소스 세트(main)의 스타일로 판단했으므로, "
