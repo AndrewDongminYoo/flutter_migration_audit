@@ -143,24 +143,32 @@ DEVICE_API = 35
 THRESHOLD_KINDS = {"version", "sw", "w", "h", "size"}
 SCREEN_SIZES = {"small": 1, "normal": 2, "large": 3, "xlarge": 4}
 SCREEN_SIZE_NAMES = {v: k for k, v in SCREEN_SIZES.items()}
-# Every device has a screen size of at least `small`, so the default
-# configuration is the smallest one, as with an unset `sw`.
-SMALLEST_SIZE = SCREEN_SIZES["small"]
+# The default configuration is an ordinary phone. Android treats a resource
+# without a size as `normal` on a device that is at least `normal`, so there
+# values beats values-small (ResTable_config::isBetterThan in AOSP's
+# ResourceTypes.cpp).
+NORMAL_SIZE = SCREEN_SIZES["normal"]
 
 
 def canonical_locale(value: str) -> str:
     """Bring `b+en+US` and `en-rUS` to one form (`en-rUS`); a script is kept
-    as its own part (`b+zh+Hant+TW` becomes `zh-Hant-rTW`)."""
+    as its own part (`b+zh+Hant+TW` becomes `zh-Hant-rTW`). A tag with other
+    subtags, such as a variant (`b+en+US+POSIX`), is returned unchanged: this
+    resolver does not compare them, and the tag must stay distinct."""
     if not value.startswith("b+"):
         return value
     lang, script, region = "", None, None
     for i, sub in enumerate(value[2:].split("+")):
         if i == 0:
             lang = sub.lower()
-        elif len(sub) == 4 and sub.isalpha():
+        elif i == 1 and len(sub) == 4 and sub.isalpha():
             script = sub.title()
-        elif (len(sub) == 2 and sub.isalpha()) or (len(sub) == 3 and sub.isdigit()):
+        elif region is None and (
+            (len(sub) == 2 and sub.isalpha()) or (len(sub) == 3 and sub.isdigit())
+        ):
             region = sub.upper()
+        else:
+            return value
     return "-".join(
         [lang] + ([script] if script else []) + ([f"r{region}"] if region else [])
     )
@@ -219,6 +227,9 @@ def unmodeled_qualifiers(qualifier: str) -> set[str]:
     for kind, value in qualifier_parts(qualifier).items():
         if kind in UNMODELED_KINDS:
             out.add(kind)
+        elif kind == "locale" and str(value).startswith("b+"):
+            # Left unchanged by canonical_locale: a variant or other subtag.
+            out.add("BCP-47 variant")
         elif kind == "locale" and locale_parts(str(value))[1] is not None:
             # Android infers a script for every device locale (zh-TW is
             # Hant); without that inference the match would be a guess.
@@ -228,14 +239,39 @@ def unmodeled_qualifiers(qualifier: str) -> set[str]:
     return out
 
 
+def unchecked_qualifiers(qualifiers: set[str]) -> dict[str, set[str]]:
+    """Directories this resolver does not judge, with the reasons.
+
+    Besides the per-directory reasons of `unmodeled_qualifiers`, a regional
+    directory is unchecked when its language also appears with another
+    region. Android does not require the region to match when the scripts
+    agree, so an es-US device can take values-b+es+419; the better region is
+    then chosen by CLDR region distance, which this resolver does not model.
+    """
+    out = {q: unmodeled_qualifiers(q) for q in qualifiers}
+    regional: dict[str, dict[str, str]] = {}
+    for q in qualifiers:
+        locale = qualifier_parts(q).get("locale")
+        if not isinstance(locale, str) or out[q]:
+            continue
+        lang, _, region = locale_parts(locale)
+        if region is not None:
+            regional.setdefault(lang, {})[q] = region
+    for dirs in regional.values():
+        if len(set(dirs.values())) > 1:
+            for q in dirs:
+                out[q].add("region fallback")
+    return {q: reasons for q, reasons in out.items() if reasons}
+
+
 def device_config(qualifier: str) -> dict[str, str | int]:
     """The API 35 device configuration that `qualifier` describes. A device is
     always in day or night mode, so an unspecified mode means `notnight`, and
-    always has a screen size, so an unspecified size means the smallest."""
+    always has a screen size, so an unspecified size means `normal`."""
     config = qualifier_parts(qualifier)
     config["version"] = DEVICE_API
     config.setdefault("night", "notnight")
-    config.setdefault("size", SMALLEST_SIZE)
+    config.setdefault("size", NORMAL_SIZE)
     return config
 
 
@@ -261,7 +297,7 @@ def config_name(config: dict) -> str:
             kind == "version"
             or kind not in config
             or (kind == "night" and config[kind] == "notnight")
-            or (kind == "size" and config[kind] == SMALLEST_SIZE)
+            or (kind == "size" and config[kind] == NORMAL_SIZE)
         ):
             continue
         value = config[kind]
@@ -309,7 +345,17 @@ def best_match(qualifiers: set[str], config: dict) -> str | None:
         if not any(kind in d for _, d in candidates):
             continue
         with_kind = [(q, d) for q, d in candidates if kind in d]
-        if kind in THRESHOLD_KINDS:
+        if kind == "size":
+            # Unlike other qualifiers, an unqualified size is not eliminated:
+            # it counts as `normal` on a device that is at least `normal`.
+            # On a tie the explicit size wins (values-normal over values).
+            device = config.get("size", NORMAL_SIZE)
+            unset = NORMAL_SIZE if device >= NORMAL_SIZE else 0
+            sizes = [(q, d, d.get("size", unset)) for q, d in candidates]
+            top = max(s for _, _, s in sizes)
+            at_top = [(q, d) for q, d, s in sizes if s == top]
+            with_kind = [(q, d) for q, d in at_top if "size" in d] or at_top
+        elif kind in THRESHOLD_KINDS:
             top = max(d[kind] for _, d in with_kind)
             with_kind = [(q, d) for q, d in with_kind if d[kind] == top]
         elif kind == "locale":

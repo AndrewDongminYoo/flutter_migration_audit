@@ -587,6 +587,9 @@ def test_different_chain_with_the_same_outcome_is_reported(index):
         # Android infers a script for every device locale (zh-TW is Hant), and
         # this resolver does not, so scripted locales stay unchecked (#22).
         ("values-b+zh+Hant+TW", "values-zh", "BCP-47 script"),
+        # Codex review on #26: variants (POSIX) are compared by Android but
+        # not by this resolver, so they must not collapse into en-rUS.
+        ("values-b+en+US+POSIX", "values-en", "BCP-47 variant"),
     ],
 )
 def test_unmodeled_qualifiers_are_reported_not_asserted(
@@ -667,15 +670,44 @@ def test_larger_screen_falls_back_to_smaller_size(index):
     assert titles == ["`values-xlarge` 설정의 opt-out"]
 
 
-def test_small_screen_resources_apply_to_every_device(index):
-    """`small` is the smallest screen size, so values-small matches every
-    device, including the default one."""
+def test_unqualified_resources_beat_small_on_a_normal_screen(index):
+    """Codex review on #26: Android treats an unqualified size as normal when
+    the device is at least normal, so a phone uses values, not values-small
+    (ResourceTypes.cpp, ResTable_config::isBetterThan)."""
+    inputs = _inputs(
+        ("values", xml(("NormalTheme", FRAMEWORK, "false"))),
+        ("values-small", xml(("NormalTheme", FRAMEWORK, "true"))),
+    )
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    f = finding(report, "opt_out")
+    assert f.verdict == AFFECTED and "`false`" in f.reason
+
+
+def test_small_screen_is_checked_as_a_variant(index):
     inputs = _inputs(
         ("values", xml(("NormalTheme", FRAMEWORK, "true"))),
         ("values-small", xml(("NormalTheme", FRAMEWORK, "false"))),
     )
-    f = finding(audit("3.24.0", "3.27.0", inputs, index), "opt_out")
-    assert f.verdict == AFFECTED and "`false`" in f.reason
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    assert finding(report, "opt_out").verdict == NOT_AFFECTED
+    titles = [f.title for f in report.findings if f.key.startswith("opt_out_")]
+    assert titles == ["`values-small` 설정의 opt-out"]
+
+
+def test_screen_size_best_match():
+    from fma.signals import best_match, device_config
+
+    both = {"values", "values-small"}
+    assert best_match(both, device_config("values")) == "values"  # normal phone
+    assert best_match(both, device_config("values-small")) == "values-small"
+    # values-normal equals the unqualified size, and the explicit one wins.
+    assert best_match({"values", "values-normal"}, device_config("values")) == (
+        "values-normal"
+    )
+    assert best_match({"values", "values-large"}, device_config("values")) == "values"
+    assert best_match(
+        {"values-large", "values-small"}, device_config("values-xlarge")
+    ) == ("values-large")
 
 
 def test_bcp47_locale_matches_like_the_legacy_form(index):
@@ -705,6 +737,54 @@ def test_locale_forms_are_compared_in_one_form():
         {"values-en", "values-b+en+US"}, device_config("values-en-rUS")
     ) == ("values-b+en+US")
     assert best_match({"values-b+en+US"}, device_config("values-en-rGB")) is None
+    # A variant directory never stands in for the plain locale.
+    assert best_match({"values-b+en+US+POSIX"}, device_config("values-en-rUS")) is None
     # A name that is not valid in the legacy form is shown in BCP-47 form.
     assert config_name(device_config("values-b+es+419")) == "values-b+es+419"
     assert config_name(device_config("values-b+en+US")) == "values-en-rUS"
+
+
+def test_size_and_locale_combine(index):
+    """Locale ranks above screen size, so a normal English phone also takes
+    values-en-small (small does not exceed normal). The small English device
+    has the same style chain and is not reported again."""
+    inputs = _inputs(
+        ("values", xml(("NormalTheme", FRAMEWORK, "true"))),
+        ("values-en-small", xml(("NormalTheme", FRAMEWORK, "false"))),
+        ("values-b+en+US+POSIX", xml(("Other", FRAMEWORK, None))),
+    )
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    assert finding(report, "opt_out").verdict == NOT_AFFECTED
+    titles = [f.title for f in report.findings if f.key.startswith("opt_out_")]
+    assert titles == [
+        "정확히 판단하지 않는 리소스 한정자",
+        "`values-en` 설정의 opt-out",
+    ]
+
+
+@pytest.mark.parametrize(
+    "theme_dir, base_dir",
+    [
+        # Local review of #26: an es-US device can take values-b+es+419,
+        # because Android matches a sibling region when the scripts agree.
+        ("values-es-rUS", "values-b+es+419"),
+        ("values-en-rUS", "values-en-rGB"),
+    ],
+)
+def test_sibling_regions_are_reported_not_asserted(index, theme_dir, base_dir):
+    inputs = _inputs(
+        (
+            "values",
+            xml(("NormalTheme", FRAMEWORK, "true"), ("Base", FRAMEWORK, "true")),
+        ),
+        (theme_dir, xml(("NormalTheme", "@style/Base", None))),
+        (base_dir, xml(("Base", FRAMEWORK, "false"))),
+    )
+    report = audit("3.24.0", "3.27.0", inputs, index)
+    f = next(
+        f for f in report.findings if f.title == "정확히 판단하지 않는 리소스 한정자"
+    )
+    assert "region fallback" in f.reason
+    assert f"`{theme_dir}`" in f.reason and f"`{base_dir}`" in f.reason
+    titles = [x.title for x in report.findings if x.key.startswith("opt_out_")]
+    assert titles == ["정확히 판단하지 않는 리소스 한정자"]

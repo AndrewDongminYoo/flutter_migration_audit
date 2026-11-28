@@ -21,7 +21,7 @@ from .signals import (
     normalize_config,
     qualifier_parts,
     resolve_opt_out,
-    unmodeled_qualifiers,
+    unchecked_qualifiers,
 )
 from .versions import Release, check_range
 
@@ -414,12 +414,11 @@ class Auditor:
         """
         inp = self.inputs
         before = len(self.findings)
-        unmodeled = sorted(
-            {s.qualifier for s in inp.styles if unmodeled_qualifiers(s.qualifier)}
-        )
+        unchecked = unchecked_qualifiers({s.qualifier for s in inp.styles})
+        unmodeled = sorted(unchecked)
         if unmodeled:
             kinds_text = ", ".join(
-                sorted({k for q in unmodeled for k in unmodeled_qualifiers(q)})
+                sorted({k for reasons in unchecked.values() for k in reasons})
             )
             self.add(
                 "opt_out_variant",
@@ -483,6 +482,11 @@ class Auditor:
             for k, v in smaller.items():
                 if k not in larger:
                     return False
+                # Every configuration has a screen size, and the default is
+                # `normal`, not the smallest; a smaller screen with the same
+                # style chain shows nothing new either.
+                if k == "size":
+                    continue
                 if larger[k] != v and not (k in THRESHOLD_KINDS and larger[k] >= v):
                     return False
             return True
